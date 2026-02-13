@@ -30,7 +30,9 @@ export default function Home() {
     defaultValues: {
       location: "",
       days: 3,
-      budget: 3,
+      budget_level: 3,
+      budget_amount: 1000,
+      currency: "USD",
       companions: "Couple",
       energy: 3,
       activity: 3,
@@ -39,6 +41,13 @@ export default function Home() {
       themes: [],
       food: "Local Street Food",
       weather: "Sunny & Warm",
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      personality: {
+        spontaneity: 3,
+        organization: 3,
+        curiosity: 3,
+      }
     },
     mode: "onChange"
   });
@@ -46,8 +55,8 @@ export default function Home() {
   const nextStep = async () => {
     // Validate current step fields before proceeding
     let fieldsToValidate: (keyof TripRequest)[] = [];
-    if (currentStep === 0) fieldsToValidate = ['location', 'days', 'companions'];
-    if (currentStep === 1) fieldsToValidate = ['energy', 'budget', 'activity', 'social', 'aesthetic'];
+    if (currentStep === 0) fieldsToValidate = ['location', 'days', 'companions', 'currency', 'budget_amount', 'startDate', 'endDate'];
+    if (currentStep === 1) fieldsToValidate = ['energy', 'budget_level', 'activity', 'social', 'aesthetic'];
     
     const isValid = await form.trigger(fieldsToValidate);
     if (isValid) setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1));
@@ -95,16 +104,45 @@ export default function Home() {
               <WizardStep key="step1" title={STEPS[0].title} description={STEPS[0].desc}>
                 <div className="grid gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="location">Dream Destination</Label>
+                    <Label htmlFor="location">Starting Location</Label>
                     <Input 
                       id="location" 
-                      placeholder="e.g. Tokyo, Japan or Amalfi Coast" 
+                      placeholder="e.g. New York, USA" 
                       className="h-12 text-lg"
                       {...form.register("location")}
                     />
                     {form.formState.errors.location && (
                       <p className="text-sm text-destructive">{form.formState.errors.location.message}</p>
                     )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="currency">Currency</Label>
+                      <Select 
+                        onValueChange={(val) => form.setValue("currency", val)} 
+                        defaultValue={form.getValues("currency")}
+                      >
+                        <SelectTrigger className="h-12">
+                          <SelectValue placeholder="Select Currency" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {["USD", "EUR", "GBP", "JPY", "AUD", "CAD"].map(c => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="budget_amount">Total Budget</Label>
+                      <Input 
+                        id="budget_amount" 
+                        type="number" 
+                        className="h-12"
+                        {...form.register("budget_amount", { valueAsNumber: true })}
+                      />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -116,7 +154,7 @@ export default function Home() {
                         min={1} 
                         max={30}
                         className="h-12"
-                        {...form.register("days")}
+                        {...form.register("days", { valueAsNumber: true })}
                       />
                     </div>
 
@@ -157,8 +195,8 @@ export default function Home() {
                     label="Budget" 
                     leftLabel="Budget" 
                     rightLabel="Luxury"
-                    value={form.watch("budget")}
-                    onChange={(val) => form.setValue("budget", val[0])}
+                    value={form.watch("budget_level")}
+                    onChange={(val) => form.setValue("budget_level", val[0])}
                     icon={<Sparkles className="w-5 h-5 text-primary" />}
                   />
 
@@ -214,13 +252,53 @@ export default function Home() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <Label htmlFor="food">Food Preference</Label>
-                      <Input id="food" {...form.register("food")} placeholder="e.g. Vegetarian friendly, Seafood..." className="h-12" />
+                      <Label htmlFor="food">Dietary Preferences</Label>
+                      <Select 
+                        onValueChange={(val) => form.setValue("food", val)} 
+                        defaultValue={form.getValues("food")}
+                      >
+                        <SelectTrigger className="h-12">
+                          <SelectValue placeholder="Select dietary preference" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {["Vegetarian", "Vegan", "Sea Food", "Halal", "Gluten-Free", "No Restrictions"].map(d => (
+                            <SelectItem key={d} value={d}>{d}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="weather">Preferred Weather</Label>
                       <Input id="weather" {...form.register("weather")} placeholder="e.g. Cool & breezy" className="h-12" />
                     </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <Label className="text-lg font-semibold">Personality Evaluation</Label>
+                    <PreferenceSlider 
+                      label="Spontaneity" 
+                      leftLabel="Planned" 
+                      rightLabel="Spontaneous"
+                      value={form.watch("personality.spontaneity")}
+                      onChange={(val) => form.setValue("personality.spontaneity", val[0])}
+                      icon={<Sparkles className="w-5 h-5 text-primary" />}
+                    />
+                    <PreferenceSlider 
+                      label="Organization" 
+                      leftLabel="Go with the flow" 
+                      rightLabel="Highly Organized"
+                      value={form.watch("personality.organization")}
+                      onChange={(val) => form.setValue("personality.organization", val[0])}
+                      icon={<Compass className="w-5 h-5 text-primary" />}
+                    />
+                    <PreferenceSlider 
+                      label="Curiosity" 
+                      leftLabel="Familiar" 
+                      rightLabel="Adventurous"
+                      value={form.watch("personality.curiosity")}
+                      onChange={(val) => form.setValue("personality.curiosity", val[0])}
+                      icon={<Plane className="w-5 h-5 text-primary" />}
+                    />
                   </div>
                 </div>
               </WizardStep>
