@@ -6,7 +6,7 @@ import { z } from "zod";
 
 export const tripRequestSchema = z.object({
   energy: z.number().min(1).max(5),
-  budget_level: z.number().min(1).max(5), // Renamed from budget to distinguish from numeric amount
+  budget_level: z.number().min(1).max(5),
   budget_amount: z.number().min(0),
   currency: z.string(),
   activity: z.number().min(1).max(5),
@@ -29,10 +29,9 @@ export const tripRequestSchema = z.object({
 
 export const dailyPlanSchema = z.object({
   day: z.number(),
-  time: z.string(), // New field for timing
   energy_level: z.enum(["low", "medium", "high"]),
   plan: z.object({
-    morning: z.string(),
+    morning: z.string(), // Will contain timing info in the string
     afternoon: z.string(),
     evening: z.string(),
   }),

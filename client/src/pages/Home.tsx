@@ -147,15 +147,37 @@ export default function Home() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <Label htmlFor="days">Duration (Days)</Label>
-                      <Input 
-                        id="days" 
-                        type="number" 
-                        min={1} 
-                        max={30}
-                        className="h-12"
-                        {...form.register("days", { valueAsNumber: true })}
-                      />
+                      <Label>Travel Dates</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input 
+                          type="date" 
+                          className="h-12"
+                          {...form.register("startDate")}
+                          onChange={(e) => {
+                            form.setValue("startDate", e.target.value);
+                            const start = new Date(e.target.value);
+                            const end = new Date(form.getValues("endDate"));
+                            if (end > start) {
+                              const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                              form.setValue("days", diff);
+                            }
+                          }}
+                        />
+                        <Input 
+                          type="date" 
+                          className="h-12"
+                          {...form.register("endDate")}
+                          onChange={(e) => {
+                            form.setValue("endDate", e.target.value);
+                            const end = new Date(e.target.value);
+                            const start = new Date(form.getValues("startDate"));
+                            if (end > start) {
+                              const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                              form.setValue("days", diff);
+                            }
+                          }}
+                        />
+                      </div>
                     </div>
 
                     <div className="space-y-2">

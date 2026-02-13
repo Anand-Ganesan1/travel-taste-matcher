@@ -104,23 +104,23 @@ export default function Results() {
                     </div>
                   </CardHeader>
                   <CardContent className="grid md:grid-cols-3 gap-6 pt-6">
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <div className="flex items-center gap-2 text-primary font-semibold">
                         <Coffee className="w-4 h-4" /> Morning
                       </div>
-                      <p className="text-muted-foreground text-sm leading-relaxed">{day.plan.morning}</p>
+                      <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-line">{day.plan.morning}</p>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <div className="flex items-center gap-2 text-accent font-semibold">
                         <Sun className="w-4 h-4" /> Afternoon
                       </div>
-                      <p className="text-muted-foreground text-sm leading-relaxed">{day.plan.afternoon}</p>
+                      <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-line">{day.plan.afternoon}</p>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <div className="flex items-center gap-2 text-indigo-500 font-semibold">
                         <Moon className="w-4 h-4" /> Evening
                       </div>
-                      <p className="text-muted-foreground text-sm leading-relaxed">{day.plan.evening}</p>
+                      <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-line">{day.plan.evening}</p>
                     </div>
                   </CardContent>
                 </Card>

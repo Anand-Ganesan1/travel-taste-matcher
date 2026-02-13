@@ -8,47 +8,49 @@
   --font-display: 'Outfit', sans-serif;
   --font-body: 'DM Sans', sans-serif;
 
-  /* Natural, Travel-inspired Palette */
-  /* Primary: Ocean Teal */
-  --primary: 183 100% 28%;
+  /* Aqua Aesthetic Theme */
+  /* Primary: Vibrant Turquoise */
+  --primary: 174 100% 33%;
   --primary-foreground: 180 20% 97%;
   
-  /* Secondary: Soft Sand */
-  --secondary: 36 33% 90%;
-  --secondary-foreground: 28 15% 35%;
+  /* Secondary: Soft Mint */
+  --secondary: 158 35% 90%;
+  --secondary-foreground: 160 15% 35%;
   
-  /* Accent: Sunset Coral */
-  --accent: 14 85% 65%;
+  /* Accent: Deep Sea Blue */
+  --accent: 198 100% 30%;
   --accent-foreground: 0 0% 100%;
   
   /* Muted tones for UI */
-  --muted: 210 20% 96%;
-  --muted-foreground: 215 15% 40%;
+  --muted: 180 20% 96%;
+  --muted-foreground: 180 15% 40%;
   
   /* Destruction */
   --destructive: 0 84% 60%;
   --destructive-foreground: 210 40% 98%;
 
-  /* Backgrounds */
-  --background: 36 33% 97%; /* Very light warm gray/sand */
-  --foreground: 222 47% 11%;
+  /* Backgrounds: Soft Aqua Gradient Base */
+  --background: 180 30% 98%;
+  --foreground: 200 50% 10%;
   
   /* Cards */
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
+  --card-foreground: 200 50% 10%;
   
   /* Borders */
-  --border: 214 15% 91%;
-  --input: 214 15% 91%;
-  --ring: 183 100% 28%;
+  --border: 180 20% 90%;
+  --input: 180 20% 90%;
+  --ring: 174 100% 33%;
   
-  --radius: 1rem;
+  --radius: 1.25rem;
 }
 
 @layer base {
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-body);
+    background-image: radial-gradient(circle at top left, hsl(180 100% 95%), transparent),
+                      radial-gradient(circle at bottom right, hsl(170 100% 95%), transparent);
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -65,9 +67,9 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.2);
+  background: hsl(var(--primary) / 0.2);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.4);
+  background: hsl(var(--primary) / 0.4);
 }
