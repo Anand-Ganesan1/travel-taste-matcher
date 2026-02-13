@@ -1,0 +1,248 @@
+✅ REPLIT BUILD PROMPT — Travel Taste Matcher (V1)
+
+Role: You are a senior full-stack engineer and product designer building an MVP fast.
+Optimize for working product > clean architecture > future scalability.
+
+🎯 PRODUCT OVERVIEW
+
+Build a Travel Taste Matcher web app that:
+
+Asks users about their travel personality, mood, and constraints
+
+Generates a personalized themed itinerary
+
+Outputs:
+
+Destination suggestion
+
+Day-wise plan
+
+Packing list
+
+Basic travel document reminders
+
+This is a single-user, stateless MVP. No auth. No payments. No booking.
+
+🧱 TECH STACK (STRICT)
+Frontend
+
+React
+
+Tailwind CSS
+
+TypeScript
+
+Backend
+
+Node.js
+
+Express (simple REST)
+
+OpenAI API (single call per generation)
+
+Storage
+
+None (in-memory only)
+
+📐 APP STRUCTURE
+Pages
+
+Home / Questionnaire
+
+Results Page (Generated Itinerary)
+
+🧠 USER INPUTS (FORM)
+
+Create a simple form that collects:
+
+Ratings (1–5)
+
+Energy Level
+
+Budget Elasticity
+
+Activity Intensity
+
+Social Media Importance
+
+Aesthetic Preference
+
+Multi-Select
+
+Theme Preferences
+(Nature, Water, Hills, City, Adventure, Culture)
+
+Dropdowns
+
+Food Preference
+(Vegetarian, Vegan, Flexible)
+
+Weather Preference
+(Cold, Mild, Warm)
+
+Other Inputs
+
+Number of days
+
+Starting location (city/country)
+
+Traveling with
+(Solo, Partner, Friends, Family)
+
+🧠 AI LOGIC (SIMPLE)
+Prompt Strategy
+
+Single structured OpenAI prompt
+
+No embeddings
+
+No external APIs
+
+The AI must generate:
+
+Trip Theme Name
+
+Recommended Destination
+
+Why This Matches You (bullet points)
+
+Day-Wise Itinerary
+
+Packing List
+
+Document Reminders
+
+📄 OUTPUT FORMAT (STRICT JSON)
+
+The OpenAI response must follow this schema exactly:
+
+{
+  "trip_theme": "",
+  "destination": "",
+  "why_it_matches_you": [],
+  "daily_itinerary": [
+    {
+      "day": 1,
+      "energy_level": "low | medium | high",
+      "plan": {
+        "morning": "",
+        "afternoon": "",
+        "evening": ""
+      }
+    }
+  ],
+  "packing_list": {
+    "clothes": {
+      "tops": 0,
+      "bottoms": 0,
+      "outerwear": 0
+    },
+    "shoes": [],
+    "accessories": [],
+    "misc": []
+  },
+  "documents": []
+}
+
+🔮 OPENAI PROMPT (USE THIS VERBATIM)
+
+You are a travel planner AI that designs trips based on personality and vibe.
+
+User preferences:
+
+Energy level: {{energy}}
+
+Budget elasticity: {{budget}}
+
+Activity intensity: {{activity}}
+
+Social media importance: {{social}}
+
+Aesthetic preference: {{aesthetic}}
+
+Themes: {{themes}}
+
+Food preference: {{food}}
+
+Weather preference: {{weather}}
+
+Trip duration: {{days}} days
+
+Starting location: {{location}}
+
+Traveling with: {{companions}}
+
+Generate a personalized travel plan.
+
+Requirements:
+
+Pick ONE destination
+
+Create a trip theme name
+
+Match daily energy levels
+
+Include a realistic packing list
+
+Add general document reminders (passport, ID, visas if international)
+
+Respond ONLY in valid JSON using the provided schema.
+Do NOT include explanations or markdown.
+
+🎨 UI REQUIREMENTS
+
+Clean, calm design
+
+Card-based layout
+
+Step-by-step form (not all fields at once)
+
+Loading state while generating
+
+Error handling for malformed AI response
+
+🧪 MVP QUALITY BAR
+
+The app is successful if:
+
+A user can complete the form in < 2 minutes
+
+The AI response feels personal
+
+The itinerary feels executable
+
+The packing list feels thoughtful
+
+🚫 DO NOT BUILD
+
+Authentication
+
+Database
+
+Bookings
+
+Real pricing
+
+Maps
+
+External APIs
+
+User accounts
+
+📦 DELIVERABLES
+
+Working React UI
+
+Express backend
+
+One API route /generate-itinerary
+
+OpenAI integration
+
+Clean README with setup steps
+
+🧭 PHILOSOPHY
+
+“Make it feel like a friend planned this trip for me.”
+
+END PROMPT
