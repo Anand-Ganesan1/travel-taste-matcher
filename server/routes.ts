@@ -24,25 +24,28 @@ You are a travel planner AI that designs trips based on personality and vibe.
 
 User preferences:
 Energy level: ${input.energy}
-Budget elasticity: ${input.budget}
+Budget elasticity: ${input.budget_level}
+Budget amount: ${input.budget_amount} ${input.currency}
 Activity intensity: ${input.activity}
 Social media importance: ${input.social}
 Aesthetic preference: ${input.aesthetic}
 Themes: ${input.themes.join(", ")}
 Food preference: ${input.food}
 Weather preference: ${input.weather}
-Trip duration: ${input.days} days
+Travel dates: ${input.startDate} to ${input.endDate} (${input.days} days)
 Starting location: ${input.location}
 Traveling with: ${input.companions}
+Personality traits (1-5): Spontaneity: ${input.personality.spontaneity}, Organization: ${input.personality.organization}, Curiosity: ${input.personality.curiosity}
 
 Generate a personalized travel plan.
 
 Requirements:
-Pick ONE destination
-Create a trip theme name
-Match daily energy levels
-Include a realistic packing list
-Add general document reminders (passport, ID, visas if international)
+Pick ONE destination that fits the weather preference for the given dates and budget.
+Create a trip theme name.
+Match daily energy levels.
+Include a realistic packing list.
+Add general document reminders (passport, ID, visas if international).
+Each itinerary item MUST include a specific time (e.g., "09:00 AM", "02:30 PM").
 
 Respond ONLY in valid JSON using the following schema:
 {
@@ -54,9 +57,9 @@ Respond ONLY in valid JSON using the following schema:
       "day": 1,
       "energy_level": "low | medium | high",
       "plan": {
-        "morning": "",
-        "afternoon": "",
-        "evening": ""
+        "morning": "TIMED PLAN (e.g., 09:00 AM - Activity...)",
+        "afternoon": "TIMED PLAN (e.g., 01:00 PM - Activity...)",
+        "evening": "TIMED PLAN (e.g., 07:00 PM - Activity...)"
       }
     }
   ],
@@ -77,7 +80,7 @@ Do NOT include explanations or markdown.
 `;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-5.2", // Using the recommended model from blueprint
+        model: "gpt-5.2",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
       });
@@ -88,10 +91,6 @@ Do NOT include explanations or markdown.
       }
 
       const result = JSON.parse(content);
-      
-      // Basic validation of response structure (optional, but good practice)
-      // We rely on OpenAI following the schema, but could parse with tripResponseSchema here
-
       res.json(result);
     } catch (err) {
       console.error("Error generating itinerary:", err);
