@@ -5,10 +5,13 @@ import { z } from "zod";
 // We don't need a DB for this MVP, but we'll define the schemas here for shared types
 
 export const tripRequestSchema = z.object({
+  trip_type: z.enum(["domestic", "international"], {
+    required_error: "Please select domestic or international travel",
+  }),
   energy: z.number().min(1).max(5),
   budget_level: z.number().min(1).max(5),
-  budget_amount: z.number().min(0),
-  currency: z.string(),
+  budget_amount: z.number().positive("Budget amount is required"),
+  currency: z.string().min(1, "Currency is required"),
   activity: z.number().min(1).max(5),
   social: z.number().min(1).max(5),
   aesthetic: z.number().min(1).max(5),
@@ -16,16 +19,26 @@ export const tripRequestSchema = z.object({
   food: z.string(),
   weather: z.string(),
   days: z.coerce.number().min(1),
-  startDate: z.string(),
-  endDate: z.string(),
-  location: z.string(),
-  companions: z.string(),
+  startDate: z.string().min(1, "Start date is required"),
+  endDate: z.string().min(1, "End date is required"),
+  location: z.string().trim().min(1, "Starting location is required"),
+  companions: z.string().min(1, "Companions is required"),
   personality: z.object({
     spontaneity: z.number().min(1).max(5),
     organization: z.number().min(1).max(5),
     curiosity: z.number().min(1).max(5),
   }),
-});
+}).refine(
+  ({ startDate, endDate }) => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    return !isNaN(start.getTime()) && !isNaN(end.getTime()) && end > start;
+  },
+  {
+    message: "End date must be after start date",
+    path: ["endDate"],
+  },
+);
 
 export const dailyPlanSchema = z.object({
   day: z.number(),
