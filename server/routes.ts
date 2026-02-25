@@ -458,6 +458,8 @@ Rules:
 - Output exactly 3 options sorted by total_score descending.
 - Each metric including total_score must be on a 1 to 10 scale.
 - total_score must be a normalized composite score (not a sum beyond 10).
+- For international trips, return country-level recommendations in "country" and keep "destination" as a representative city/region within that country.
+- For domestic trips, keep "destination" as city/region and "country" as the same origin country.
 - If trip planning mode is know_destination and destination is given (${input.destination_location || "none"}), option 1 MUST be that destination.
 - Enforce trip type domestic/international from starting location country.
 - Respect must-avoid and max flight duration.

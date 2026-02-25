@@ -63,6 +63,14 @@ export const tripRequestSchema = z.object({
       path: ["destination_location"],
     });
   }
+
+  if (data.companions === "Solo" && data.number_of_people !== 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "For Solo travel, number of people must be 1",
+      path: ["number_of_people"],
+    });
+  }
 });
 
 export const dailyPlanSchema = z.object({

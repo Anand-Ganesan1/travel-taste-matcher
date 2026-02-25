@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@shared/routes";
@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Plane, Compass, Sparkles, Coffee } from "lucide-react";
+import { Loader2, Plane, Compass, Sparkles, Coffee, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Helper for multi-step form
@@ -58,6 +58,11 @@ type DestinationOption = {
     safety_accessibility: number;
     total_score: number;
   };
+};
+
+type CompanionOption = {
+  value: string;
+  label: string;
 };
 
 const CURRENCY_TO_INR: Record<string, number> = {
@@ -299,6 +304,8 @@ export default function Home() {
   const [isFindingDestinations, setIsFindingDestinations] = useState(false);
   const [destinationOptions, setDestinationOptions] = useState<DestinationOption[]>([]);
   const [selectedDestination, setSelectedDestination] = useState<string>("");
+  const skipNextLocationSearchRef = useRef(false);
+  const skipNextDestinationSearchRef = useRef(false);
   const generateTrip = useGenerateTrip();
   const todayDate = new Date();
 
@@ -362,7 +369,7 @@ export default function Home() {
         fieldsToValidate.push("destination_location");
       }
     }
-    if (currentStep === 1) fieldsToValidate = ['energy', 'budget_level', 'activity', 'social', 'aesthetic'];
+    if (currentStep === 1) fieldsToValidate = ['energy', 'activity', 'social', 'aesthetic'];
     
     const isValid = await form.trigger(fieldsToValidate);
     if (!isValid) return;
@@ -434,6 +441,16 @@ export default function Home() {
 
   const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
 
+  const getDestinationSelectionLabel = (
+    option: DestinationOption,
+    tripType: TripType,
+  ): string => {
+    if (tripType === "international") {
+      return option.country || option.destination;
+    }
+    return `${option.destination}, ${option.country}`;
+  };
+
   const onSubmit = async (data: TripRequest) => {
     if (data.trip_goal === "need_recommendation") {
       if (!destinationOptions.length) {
@@ -452,7 +469,7 @@ export default function Home() {
           setDestinationOptions(result.options);
           if (result.options[0]) {
             setSelectedDestination(
-              `${result.options[0].destination}, ${result.options[0].country}`,
+              getDestinationSelectionLabel(result.options[0], effectiveRecommendationTripType),
             );
           }
           return;
@@ -487,7 +504,13 @@ export default function Home() {
   };
 
   const THEMES = ["Nature", "City", "Adventure", "Relaxation", "Culture", "History", "Nightlife", "Shopping"];
-  const COMPANIONS = ["Solo", "Couple", "Family with Kids", "Friends Group", "Senior Citizens"];
+  const COMPANIONS: CompanionOption[] = [
+    { value: "Solo", label: "Solo Traveler" },
+    { value: "Couple", label: "Couple" },
+    { value: "Family with Kids", label: "Family with Kids" },
+    { value: "Friends Group", label: "Friends Group" },
+    { value: "Senior Citizens", label: "Senior Citizens" },
+  ];
   const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "INR"];
   const todayDateString = toLocalDateString(todayDate);
   const tripGoalValue = form.watch("trip_goal");
@@ -500,6 +523,8 @@ export default function Home() {
   const weatherValue = form.watch("weather");
   const currencyValue = form.watch("currency");
   const budgetAmountValue = form.watch("budget_amount");
+  const companionsValue = form.watch("companions");
+  const manualTripType = form.watch("trip_type");
   const minEndDate = startDateValue
     ? new Date(new Date(startDateValue).getTime() + 24 * 60 * 60 * 1000)
         .toISOString()
@@ -510,6 +535,10 @@ export default function Home() {
 
   useEffect(() => {
     const query = locationValue?.trim() || "";
+    if (skipNextLocationSearchRef.current) {
+      skipNextLocationSearchRef.current = false;
+      return;
+    }
     if (query.length < 2) {
       setLocationSuggestions([]);
       setShowLocationSuggestions(false);
@@ -545,6 +574,10 @@ export default function Home() {
 
   useEffect(() => {
     const query = destinationValue?.trim() || "";
+    if (skipNextDestinationSearchRef.current) {
+      skipNextDestinationSearchRef.current = false;
+      return;
+    }
     if (tripGoalValue !== "know_destination" || query.length < 2) {
       setDestinationSuggestions([]);
       setShowDestinationSuggestions(false);
@@ -590,6 +623,13 @@ export default function Home() {
   }, [tripGoalValue, locationValue, destinationValue, form]);
 
   useEffect(() => {
+    if (companionsValue !== "Solo") return;
+    if (form.getValues("number_of_people") !== 1) {
+      form.setValue("number_of_people", 1, { shouldValidate: true });
+    }
+  }, [companionsValue, form]);
+
+  useEffect(() => {
     setDestinationOptions([]);
     setSelectedDestination("");
   }, [
@@ -603,6 +643,13 @@ export default function Home() {
     endDateValue,
     locationValue,
   ]);
+
+  const effectiveRecommendationTripType: TripType =
+    tripGoalValue === "know_destination" && destinationValue
+      ? getCountryFromLocation(locationValue || "") === getCountryFromLocation(destinationValue || "")
+        ? "domestic"
+        : "international"
+      : (manualTripType as TripType);
 
   return (
     <Layout>
@@ -724,16 +771,32 @@ export default function Home() {
                       <Input
                         id="location"
                         placeholder="e.g. Chennai, India"
-                        className="h-12 text-lg"
+                        className="h-12 text-lg pr-10"
                         required
                         {...locationField}
                         onFocus={() => setShowLocationSuggestions(locationSuggestions.length > 0)}
                         onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 120)}
                         onChange={(e) => {
+                          skipNextLocationSearchRef.current = false;
                           locationField.onChange(e);
                           setShowLocationSuggestions(true);
                         }}
                       />
+                      {locationValue?.trim() && (
+                        <button
+                          type="button"
+                          aria-label="Clear starting location"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            skipNextLocationSearchRef.current = false;
+                            form.setValue("location", "", { shouldValidate: true });
+                            setLocationSuggestions([]);
+                            setShowLocationSuggestions(false);
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
                       {isLocationLoading && (
                         <p className="text-xs text-muted-foreground mt-2">Searching locations...</p>
                       )}
@@ -746,6 +809,7 @@ export default function Home() {
                               className="block w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground"
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={() => {
+                                skipNextLocationSearchRef.current = true;
                                 form.setValue("location", suggestion.displayName, { shouldValidate: true });
                                 setShowLocationSuggestions(false);
                                 setLocationSuggestions([]);
@@ -769,16 +833,32 @@ export default function Home() {
                         <Input
                           id="destination_location"
                           placeholder="e.g. Paris, France"
-                          className="h-12 text-lg"
+                          className="h-12 text-lg pr-10"
                           required
                           {...destinationField}
                           onFocus={() => setShowDestinationSuggestions(destinationSuggestions.length > 0)}
                           onBlur={() => setTimeout(() => setShowDestinationSuggestions(false), 120)}
                           onChange={(e) => {
+                            skipNextDestinationSearchRef.current = false;
                             destinationField.onChange(e);
                             setShowDestinationSuggestions(true);
                           }}
                         />
+                        {destinationValue?.trim() && (
+                          <button
+                            type="button"
+                            aria-label="Clear destination location"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              skipNextDestinationSearchRef.current = false;
+                              form.setValue("destination_location", "", { shouldValidate: true });
+                              setDestinationSuggestions([]);
+                              setShowDestinationSuggestions(false);
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
                         {isDestinationLoading && (
                           <p className="text-xs text-muted-foreground mt-2">Searching destinations...</p>
                         )}
@@ -791,6 +871,7 @@ export default function Home() {
                                 className="block w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground"
                                 onMouseDown={(e) => e.preventDefault()}
                                 onClick={() => {
+                                  skipNextDestinationSearchRef.current = true;
                                   form.setValue("destination_location", suggestion.displayName, { shouldValidate: true });
                                   setShowDestinationSuggestions(false);
                                   setDestinationSuggestions([]);
@@ -830,40 +911,6 @@ export default function Home() {
                         <p className="text-sm text-destructive">{form.formState.errors.currency.message}</p>
                       )}
                     </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="budget_amount">
-                        {form.watch("budget_mode") === "per_person" ? "Budget Per Person" : "Total Budget"}
-                      </Label>
-                      <Input 
-                        id="budget_amount" 
-                        type="number" 
-                        className="h-12"
-                        required
-                        min={1}
-                        {...form.register("budget_amount", { valueAsNumber: true })}
-                      />
-                      {form.formState.errors.budget_amount && (
-                        <p className="text-sm text-destructive">{form.formState.errors.budget_amount.message}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="number_of_people">Number of People</Label>
-                      <Input
-                        id="number_of_people"
-                        type="number"
-                        min={1}
-                        className="h-12"
-                        required
-                        {...form.register("number_of_people", { valueAsNumber: true })}
-                      />
-                      {form.formState.errors.number_of_people && (
-                        <p className="text-sm text-destructive">{form.formState.errors.number_of_people.message}</p>
-                      )}
-                    </div>
                     <div className="space-y-2">
                       <Label>Budget Mode</Label>
                       <Select
@@ -884,6 +931,25 @@ export default function Home() {
                       </Select>
                       {form.formState.errors.budget_mode && (
                         <p className="text-sm text-destructive">{form.formState.errors.budget_mode.message}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="budget_amount">
+                        {form.watch("budget_mode") === "per_person" ? "Budget Per Person" : "Total Budget"}
+                      </Label>
+                      <Input 
+                        id="budget_amount" 
+                        type="number" 
+                        className="h-12"
+                        required
+                        min={1}
+                        {...form.register("budget_amount", { valueAsNumber: true })}
+                      />
+                      {form.formState.errors.budget_amount && (
+                        <p className="text-sm text-destructive">{form.formState.errors.budget_amount.message}</p>
                       )}
                     </div>
                   </div>
@@ -982,26 +1048,52 @@ export default function Home() {
                       )}
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Companions</Label>
-                      <Select 
-                        onValueChange={(val) =>
-                          form.setValue("companions", val, { shouldValidate: true })
-                        }
-                        defaultValue={form.getValues("companions")}
-                      >
-                        <SelectTrigger className="h-12">
-                          <SelectValue placeholder="Who are you traveling with?" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {COMPANIONS.map(c => (
-                            <SelectItem key={c} value={c}>{c}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {form.formState.errors.companions && (
-                        <p className="text-sm text-destructive">{form.formState.errors.companions.message}</p>
-                      )}
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Travel Setup</Label>
+                        <Select 
+                          onValueChange={(val) =>
+                            form.setValue("companions", val, { shouldValidate: true })
+                          }
+                          defaultValue={form.getValues("companions")}
+                        >
+                          <SelectTrigger className="h-12">
+                            <SelectValue placeholder="How are you traveling?" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {COMPANIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {form.formState.errors.companions && (
+                          <p className="text-sm text-destructive">{form.formState.errors.companions.message}</p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="number_of_people">Number of People</Label>
+                        <Input
+                          id="number_of_people"
+                          type="number"
+                          min={1}
+                          max={companionsValue === "Solo" ? 1 : undefined}
+                          disabled={companionsValue === "Solo"}
+                          className="h-12"
+                          required
+                          {...form.register("number_of_people", { valueAsNumber: true })}
+                        />
+                        {companionsValue === "Solo" && (
+                          <p className="text-xs text-muted-foreground">
+                            Solo travel is fixed to 1 person.
+                          </p>
+                        )}
+                        {form.formState.errors.number_of_people && (
+                          <p className="text-sm text-destructive">{form.formState.errors.number_of_people.message}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -1161,11 +1253,14 @@ export default function Home() {
               <Label className="text-lg font-semibold">Top Destination Options</Label>
               <div className="grid gap-4">
                 {destinationOptions.map((option, index) => {
-                  const destinationLabel = `${option.destination}, ${option.country}`;
+                  const destinationLabel = getDestinationSelectionLabel(
+                    option,
+                    effectiveRecommendationTripType,
+                  );
                   const isSelected = selectedDestination === destinationLabel;
                   return (
                     <button
-                      key={destinationLabel}
+                      key={`${destinationLabel}-${index}`}
                       type="button"
                       className={`w-full text-left rounded-lg border p-4 transition ${
                         isSelected
