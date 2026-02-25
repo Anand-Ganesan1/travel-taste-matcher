@@ -8,19 +8,16 @@ export const tripRequestSchema = z.object({
   trip_goal: z.enum(["need_recommendation", "know_destination"], {
     required_error: "Please select how you want to plan your trip",
   }),
-  comfort_level: z.enum(["budget", "medium", "premium"], {
-    required_error: "Please select comfort level",
+  comfort_level: z.enum(["low", "medium", "premium"], {
+    required_error: "Please select experience level",
   }),
   trip_type: z.enum(["domestic", "international"], {
     required_error: "Please select domestic or international travel",
   }),
   energy: z.number().min(1).max(5),
   number_of_people: z.number().int().min(1, "Number of people is required"),
-  budget_mode: z.enum(["total", "per_person"], {
-    required_error: "Please select budget mode",
-  }),
   includes_flights: z.boolean(),
-  max_flight_hours: z.number().min(1, "Max flight duration is required").max(24),
+  max_flight_hours: z.number().min(1, "Max flight duration is required").max(24).optional(),
   budget_amount: z.number().positive("Budget amount is required"),
   currency: z.string().min(1, "Currency is required"),
   activity: z.number().min(1).max(5),
@@ -35,7 +32,7 @@ export const tripRequestSchema = z.object({
   location: z.string().trim().min(1, "Starting location is required"),
   destination_location: z.string().trim().optional(),
   must_avoid: z.string().trim().optional(),
-  companions: z.string().min(1, "Companions is required"),
+  companions: z.string().min(1, "Travel setup is required"),
   personality: z.object({
     spontaneity: z.number().min(1).max(5),
     organization: z.number().min(1).max(5),
@@ -69,6 +66,22 @@ export const tripRequestSchema = z.object({
       code: z.ZodIssueCode.custom,
       message: "For Solo travel, number of people must be 1",
       path: ["number_of_people"],
+    });
+  }
+
+  if (data.companions === "Couple" && data.number_of_people !== 2) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "For Couple travel, number of people must be 2",
+      path: ["number_of_people"],
+    });
+  }
+
+  if (data.includes_flights && data.trip_goal !== "know_destination" && !data.max_flight_hours) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Max flight duration is required when flights are included",
+      path: ["max_flight_hours"],
     });
   }
 });
