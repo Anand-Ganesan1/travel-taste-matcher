@@ -30,6 +30,7 @@ function toLocalDateString(date: Date): string {
 }
 
 type TripType = "domestic" | "international";
+type TripGoal = "need_recommendation" | "know_destination";
 
 type LocationSuggestion = {
   city: string;
@@ -241,6 +242,9 @@ export default function Home() {
   const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
   const [isLocationLoading, setIsLocationLoading] = useState(false);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
+  const [destinationSuggestions, setDestinationSuggestions] = useState<LocationSuggestion[]>([]);
+  const [isDestinationLoading, setIsDestinationLoading] = useState(false);
+  const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false);
   const [isAnalysingBasics, setIsAnalysingBasics] = useState(false);
   const [budgetFeedback, setBudgetFeedback] = useState<string | null>(null);
   const generateTrip = useGenerateTrip();
@@ -249,8 +253,10 @@ export default function Home() {
   const form = useForm<TripRequest>({
     resolver: zodResolver(tripRequestSchema),
     defaultValues: {
+      trip_goal: "need_recommendation",
       trip_type: "domestic",
       location: "",
+      destination_location: "",
       days: 3,
       budget_level: 3,
       budget_amount: 1000,
@@ -277,7 +283,15 @@ export default function Home() {
   const nextStep = async () => {
     // Validate current step fields before proceeding
     let fieldsToValidate: (keyof TripRequest)[] = [];
-    if (currentStep === 0) fieldsToValidate = ['trip_type', 'location', 'days', 'companions', 'currency', 'budget_amount', 'startDate', 'endDate'];
+    if (currentStep === 0) {
+      fieldsToValidate = ['trip_goal', 'location', 'days', 'companions', 'currency', 'budget_amount', 'startDate', 'endDate'];
+      if (form.getValues("trip_goal") !== "know_destination") {
+        fieldsToValidate.push("trip_type");
+      }
+      if (form.getValues("trip_goal") === "know_destination") {
+        fieldsToValidate.push("destination_location");
+      }
+    }
     if (currentStep === 1) fieldsToValidate = ['energy', 'budget_level', 'activity', 'social', 'aesthetic'];
     
     const isValid = await form.trigger(fieldsToValidate);
@@ -342,14 +356,17 @@ export default function Home() {
   const COMPANIONS = ["Solo", "Couple", "Family with Kids", "Friends Group", "Senior Citizens"];
   const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "INR"];
   const todayDateString = toLocalDateString(todayDate);
+  const tripGoalValue = form.watch("trip_goal");
   const startDateValue = form.watch("startDate");
   const locationValue = form.watch("location");
+  const destinationValue = form.watch("destination_location");
   const minEndDate = startDateValue
     ? new Date(new Date(startDateValue).getTime() + 24 * 60 * 60 * 1000)
         .toISOString()
         .split("T")[0]
     : undefined;
   const locationField = form.register("location");
+  const destinationField = form.register("destination_location");
 
   useEffect(() => {
     const query = locationValue?.trim() || "";
@@ -386,6 +403,52 @@ export default function Home() {
     };
   }, [locationValue]);
 
+  useEffect(() => {
+    const query = destinationValue?.trim() || "";
+    if (tripGoalValue !== "know_destination" || query.length < 2) {
+      setDestinationSuggestions([]);
+      setShowDestinationSuggestions(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(async () => {
+      try {
+        setIsDestinationLoading(true);
+        const res = await fetch(`/api/location-suggestions?query=${encodeURIComponent(query)}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          setDestinationSuggestions([]);
+          return;
+        }
+        const data = (await res.json()) as { suggestions: LocationSuggestion[] };
+        setDestinationSuggestions(data.suggestions || []);
+        setShowDestinationSuggestions((data.suggestions || []).length > 0);
+      } catch {
+        setDestinationSuggestions([]);
+      } finally {
+        setIsDestinationLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [destinationValue, tripGoalValue]);
+
+  useEffect(() => {
+    if (tripGoalValue !== "know_destination") return;
+    const fromCountry = getCountryFromLocation(locationValue || "");
+    const toCountry = getCountryFromLocation(destinationValue || "");
+    if (!fromCountry || !toCountry) return;
+
+    const inferredTripType: TripType =
+      fromCountry.toLowerCase() === toCountry.toLowerCase() ? "domestic" : "international";
+    form.setValue("trip_type", inferredTripType, { shouldValidate: true });
+  }, [tripGoalValue, locationValue, destinationValue, form]);
+
   return (
     <Layout>
       <div className="max-w-2xl mx-auto">
@@ -419,27 +482,62 @@ export default function Home() {
               <WizardStep key="step1" title={STEPS[0].title} description={STEPS[0].desc}>
                 <div className="grid gap-6">
                   <div className="space-y-3">
-                    <Label>Travel Type</Label>
+                    <Label>Trip Planning Mode</Label>
                     <RadioGroup
-                      value={form.watch("trip_type")}
+                      value={form.watch("trip_goal")}
                       onValueChange={(val) =>
-                        form.setValue("trip_type", val as TripType, { shouldValidate: true })
+                        form.setValue("trip_goal", val as TripGoal, { shouldValidate: true })
                       }
                       className="grid grid-cols-1 md:grid-cols-2 gap-4"
                     >
-                      <label className="flex items-center gap-3 rounded-md border border-input p-4 cursor-pointer">
-                        <RadioGroupItem value="domestic" id="trip_type_domestic" />
-                        <span className="font-medium">Domestic</span>
+                      <label className="flex items-start gap-3 rounded-md border border-input p-4 cursor-pointer">
+                        <RadioGroupItem value="need_recommendation" id="trip_goal_need_recommendation" />
+                        <div>
+                          <p className="font-medium">I want destination recommendations</p>
+                          <p className="text-sm text-muted-foreground">We will suggest where to go based on your vibe, budget, and preferences.</p>
+                        </div>
                       </label>
-                      <label className="flex items-center gap-3 rounded-md border border-input p-4 cursor-pointer">
-                        <RadioGroupItem value="international" id="trip_type_international" />
-                        <span className="font-medium">International</span>
+                      <label className="flex items-start gap-3 rounded-md border border-input p-4 cursor-pointer">
+                        <RadioGroupItem value="know_destination" id="trip_goal_know_destination" />
+                        <div>
+                          <p className="font-medium">I already know my destination</p>
+                          <p className="text-sm text-muted-foreground">We will tailor an extensive itinerary for your chosen destination.</p>
+                        </div>
                       </label>
                     </RadioGroup>
-                    {form.formState.errors.trip_type && (
-                      <p className="text-sm text-destructive">{form.formState.errors.trip_type.message}</p>
+                    {form.formState.errors.trip_goal && (
+                      <p className="text-sm text-destructive">{form.formState.errors.trip_goal.message}</p>
                     )}
                   </div>
+
+                  {tripGoalValue !== "know_destination" ? (
+                    <div className="space-y-3">
+                      <Label>Travel Type</Label>
+                      <RadioGroup
+                        value={form.watch("trip_type")}
+                        onValueChange={(val) =>
+                          form.setValue("trip_type", val as TripType, { shouldValidate: true })
+                        }
+                        className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                      >
+                        <label className="flex items-center gap-3 rounded-md border border-input p-4 cursor-pointer">
+                          <RadioGroupItem value="domestic" id="trip_type_domestic" />
+                          <span className="font-medium">Domestic</span>
+                        </label>
+                        <label className="flex items-center gap-3 rounded-md border border-input p-4 cursor-pointer">
+                          <RadioGroupItem value="international" id="trip_type_international" />
+                          <span className="font-medium">International</span>
+                        </label>
+                      </RadioGroup>
+                      {form.formState.errors.trip_type && (
+                        <p className="text-sm text-destructive">{form.formState.errors.trip_type.message}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-input p-4 text-sm text-muted-foreground">
+                      Travel type will be auto-detected based on your starting and destination countries.
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label htmlFor="location">Starting Location</Label>
@@ -484,6 +582,52 @@ export default function Home() {
                       <p className="text-sm text-destructive">{form.formState.errors.location.message}</p>
                     )}
                   </div>
+
+                  {tripGoalValue === "know_destination" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="destination_location">Destination Location</Label>
+                      <div className="relative">
+                        <Input
+                          id="destination_location"
+                          placeholder="e.g. Paris, France"
+                          className="h-12 text-lg"
+                          required
+                          {...destinationField}
+                          onFocus={() => setShowDestinationSuggestions(destinationSuggestions.length > 0)}
+                          onBlur={() => setTimeout(() => setShowDestinationSuggestions(false), 120)}
+                          onChange={(e) => {
+                            destinationField.onChange(e);
+                            setShowDestinationSuggestions(true);
+                          }}
+                        />
+                        {isDestinationLoading && (
+                          <p className="text-xs text-muted-foreground mt-2">Searching destinations...</p>
+                        )}
+                        {showDestinationSuggestions && destinationSuggestions.length > 0 && (
+                          <div className="absolute top-full mt-1 z-[120] w-full rounded-md border bg-popover shadow-md max-h-60 overflow-auto">
+                            {destinationSuggestions.map((suggestion) => (
+                              <button
+                                key={suggestion.displayName}
+                                type="button"
+                                className="block w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  form.setValue("destination_location", suggestion.displayName, { shouldValidate: true });
+                                  setShowDestinationSuggestions(false);
+                                  setDestinationSuggestions([]);
+                                }}
+                              >
+                                {suggestion.city}, {suggestion.country}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {form.formState.errors.destination_location && (
+                        <p className="text-sm text-destructive">{form.formState.errors.destination_location.message}</p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
