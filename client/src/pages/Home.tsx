@@ -34,7 +34,7 @@ function toLocalDateString(date: Date): string {
 
 type TripType = "domestic" | "international";
 type TripGoal = "need_recommendation" | "know_destination";
-type ComfortLevel = "budget" | "medium" | "premium";
+type ComfortLevel = "low" | "medium" | "premium";
 
 type LocationSuggestion = {
   city: string;
@@ -118,6 +118,33 @@ const COUNTRY_REGION: Record<string, "asia" | "europe" | "oceania" | "north_amer
   "United Arab Emirates": "middle_east",
 };
 
+const COUNTRY_CURRENCY: Record<string, string> = {
+  India: "INR",
+  Netherlands: "EUR",
+  Germany: "EUR",
+  France: "EUR",
+  Italy: "EUR",
+  Spain: "EUR",
+  "United Kingdom": "GBP",
+  "United States": "USD",
+  Canada: "CAD",
+  Australia: "AUD",
+  Japan: "JPY",
+  Singapore: "USD",
+  "United Arab Emirates": "USD",
+};
+
+const REGION_DEFAULT_CURRENCY: Record<string, string> = {
+  asia: "INR",
+  europe: "EUR",
+  oceania: "AUD",
+  north_america: "USD",
+  south_america: "USD",
+  africa: "USD",
+  middle_east: "USD",
+  global: "INR",
+};
+
 const DOMESTIC_COST_MULTIPLIER_BY_COUNTRY: Record<string, number> = {
   Netherlands: 1.25,
   India: 0.85,
@@ -141,8 +168,9 @@ const COMPANION_SIZE: Record<string, number> = {
   Solo: 1,
   Couple: 2,
   "Family with Kids": 3.5,
+  "Family of Adults": 3,
   "Friends Group": 4,
-  "Senior Citizens": 2,
+  "Senior Citizen Friendly": 2,
 };
 
 function getCountryFromLocation(location: string): string | undefined {
@@ -156,6 +184,15 @@ function getRegionFromCountry(
 ): "asia" | "oceania" | "europe" | "north_america" | "south_america" | "africa" | "middle_east" | "global" {
   if (!country) return "global";
   return COUNTRY_REGION[country] || "global";
+}
+
+function getSuggestedCurrencyFromLocation(location: string): string {
+  const country = getCountryFromLocation(location);
+  if (country && COUNTRY_CURRENCY[country]) {
+    return COUNTRY_CURRENCY[country];
+  }
+  const region = getRegionFromCountry(country);
+  return REGION_DEFAULT_CURRENCY[region] || "INR";
 }
 
 function getInternationalOriginMultiplier(country?: string): number {
@@ -224,7 +261,7 @@ function estimateBudgetRangeInInr({
     : getInternationalOriginMultiplier(originCountry);
   const currencyMultiplier = domestic ? 1 : getCurrencyStrengthMultiplier(currency);
   const comfortMultiplier =
-    comfortLevel === "budget" ? 0.85 : comfortLevel === "premium" ? 1.35 : 1;
+    comfortLevel === "low" ? 0.85 : comfortLevel === "premium" ? 1.35 : 1;
   const flightBudgetMultiplier = includesFlights ? 1 : 0.78;
   const flightDurationMultiplier =
     tripType === "international" ? (maxFlightHours <= 6 ? 0.9 : maxFlightHours >= 12 ? 1.1 : 1) : 1;
@@ -289,6 +326,15 @@ function getBudgetGuidanceNote({
   return `From ${country || "your origin"}, balance route distance, seasonality, and flight costs to stay within budget.`;
 }
 
+function deriveBudgetTierFromRange(
+  budgetInInr: number,
+  rangeInInr: { low: number; high: number },
+): ComfortLevel {
+  if (budgetInInr < rangeInInr.low) return "low";
+  if (budgetInInr > rangeInInr.high) return "premium";
+  return "medium";
+}
+
 export default function Home() {
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(0);
@@ -318,12 +364,11 @@ export default function Home() {
       location: "",
       destination_location: "",
       number_of_people: 2,
-      budget_mode: "total",
       includes_flights: true,
       max_flight_hours: 8,
       days: 3,
       budget_amount: 1000,
-      currency: "USD",
+      currency: "INR",
       companions: "Couple",
       energy: 3,
       activity: 3,
@@ -349,12 +394,9 @@ export default function Home() {
     if (currentStep === 0) {
       fieldsToValidate = [
         'trip_goal',
-        'comfort_level',
         'location',
         'number_of_people',
-        'budget_mode',
         'includes_flights',
-        'max_flight_hours',
         'days',
         'companions',
         'currency',
@@ -367,6 +409,9 @@ export default function Home() {
       }
       if (form.getValues("trip_goal") === "know_destination") {
         fieldsToValidate.push("destination_location");
+      }
+      if (form.getValues("includes_flights") && form.getValues("trip_goal") !== "know_destination") {
+        fieldsToValidate.push("max_flight_hours");
       }
     }
     if (currentStep === 1) fieldsToValidate = ['energy', 'activity', 'social', 'aesthetic'];
@@ -389,11 +434,7 @@ export default function Home() {
             (1000 * 60 * 60 * 24),
         ),
       );
-      const normalizedBudgetAmount =
-        values.budget_mode === "per_person"
-          ? values.budget_amount * values.number_of_people
-          : values.budget_amount;
-      const budgetInInr = normalizedBudgetAmount * (CURRENCY_TO_INR[values.currency] ?? 1);
+      const budgetInInr = values.budget_amount * (CURRENCY_TO_INR[values.currency] ?? 1);
       const effectiveTripType: TripType =
         values.trip_goal === "know_destination" && values.destination_location
           ? (getCountryFromLocation(values.location) === getCountryFromLocation(values.destination_location)
@@ -408,7 +449,7 @@ export default function Home() {
         startLocation: values.location,
         comfortLevel: values.comfort_level,
         includesFlights: values.includes_flights,
-        maxFlightHours: values.max_flight_hours,
+        maxFlightHours: values.max_flight_hours ?? 8,
       });
       const lowInSelectedCurrency = convertInrToCurrency(
         recommendedRangeInInr.low,
@@ -423,13 +464,17 @@ export default function Home() {
         tripType: effectiveTripType,
         startLocation: values.location,
       });
+      const derivedComfortLevel = deriveBudgetTierFromRange(budgetInInr, recommendedRangeInInr);
+      form.setValue("comfort_level", derivedComfortLevel, { shouldValidate: true });
 
       if (budgetInInr < recommendedRangeInInr.low) {
         const closeToRange = budgetInInr >= recommendedRangeInInr.low * 0.75;
+        const tooInsufficientWithFlights =
+          values.includes_flights && budgetInInr < recommendedRangeInInr.low * 0.9;
         setBudgetFeedback(
           `Your budget looks low for this setup. A more realistic range is ${formatAmount(lowInSelectedCurrency, values.currency)} to ${formatAmount(highInSelectedCurrency, values.currency)} for ${tripDays} day(s), ${values.number_of_people} traveler(s), and ${effectiveTripType} travel. ${guidanceNote}`,
         );
-        setAllowProceedAnyway(closeToRange);
+        setAllowProceedAnyway(closeToRange && !tooInsufficientWithFlights);
         setIsAnalysingBasics(false);
         return;
       }
@@ -508,8 +553,9 @@ export default function Home() {
     { value: "Solo", label: "Solo Traveler" },
     { value: "Couple", label: "Couple" },
     { value: "Family with Kids", label: "Family with Kids" },
+    { value: "Family of Adults", label: "Family of Adults" },
     { value: "Friends Group", label: "Friends Group" },
-    { value: "Senior Citizens", label: "Senior Citizens" },
+    { value: "Senior Citizen Friendly", label: "Senior Citizen Friendly" },
   ];
   const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "INR"];
   const todayDateString = toLocalDateString(todayDate);
@@ -623,11 +669,21 @@ export default function Home() {
   }, [tripGoalValue, locationValue, destinationValue, form]);
 
   useEffect(() => {
-    if (companionsValue !== "Solo") return;
-    if (form.getValues("number_of_people") !== 1) {
+    if (companionsValue === "Solo" && form.getValues("number_of_people") !== 1) {
       form.setValue("number_of_people", 1, { shouldValidate: true });
+      return;
+    }
+    if (companionsValue === "Couple" && form.getValues("number_of_people") !== 2) {
+      form.setValue("number_of_people", 2, { shouldValidate: true });
     }
   }, [companionsValue, form]);
+
+  useEffect(() => {
+    const selectedCurrency = getSuggestedCurrencyFromLocation(locationValue || "");
+    if (form.getValues("currency") !== selectedCurrency) {
+      form.setValue("currency", selectedCurrency, { shouldValidate: true });
+    }
+  }, [locationValue, form]);
 
   useEffect(() => {
     setDestinationOptions([]);
@@ -643,6 +699,12 @@ export default function Home() {
     endDateValue,
     locationValue,
   ]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [currentStep]);
 
   const effectiveRecommendationTripType: TripType =
     tripGoalValue === "know_destination" && destinationValue
@@ -742,30 +804,6 @@ export default function Home() {
                   )}
 
                   <div className="space-y-2">
-                    <Label>Comfort Level</Label>
-                    <Select
-                      onValueChange={(val) =>
-                        form.setValue("comfort_level", val as ComfortLevel, {
-                          shouldValidate: true,
-                        })
-                      }
-                      defaultValue={form.getValues("comfort_level")}
-                    >
-                      <SelectTrigger className="h-12">
-                        <SelectValue placeholder="Select comfort level" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="budget">Budget</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="premium">Premium</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {form.formState.errors.comfort_level && (
-                      <p className="text-sm text-destructive">{form.formState.errors.comfort_level.message}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
                     <Label htmlFor="location">Starting Location</Label>
                     <div className="relative">
                       <Input
@@ -773,6 +811,9 @@ export default function Home() {
                         placeholder="e.g. Chennai, India"
                         className="h-12 text-lg pr-10"
                         required
+                        autoComplete="off"
+                        spellCheck={false}
+                        name="starting_location_search"
                         {...locationField}
                         onFocus={() => setShowLocationSuggestions(locationSuggestions.length > 0)}
                         onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 120)}
@@ -835,6 +876,9 @@ export default function Home() {
                           placeholder="e.g. Paris, France"
                           className="h-12 text-lg pr-10"
                           required
+                          autoComplete="off"
+                          spellCheck={false}
+                          name="destination_location_search"
                           {...destinationField}
                           onFocus={() => setShowDestinationSuggestions(destinationSuggestions.length > 0)}
                           onBlur={() => setTimeout(() => setShowDestinationSuggestions(false), 120)}
@@ -911,35 +955,11 @@ export default function Home() {
                         <p className="text-sm text-destructive">{form.formState.errors.currency.message}</p>
                       )}
                     </div>
-                    <div className="space-y-2">
-                      <Label>Budget Mode</Label>
-                      <Select
-                        onValueChange={(val) =>
-                          form.setValue("budget_mode", val as "total" | "per_person", {
-                            shouldValidate: true,
-                          })
-                        }
-                        defaultValue={form.getValues("budget_mode")}
-                      >
-                        <SelectTrigger className="h-12">
-                          <SelectValue placeholder="Select budget mode" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="total">Total Trip Budget</SelectItem>
-                          <SelectItem value="per_person">Per Person Budget</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {form.formState.errors.budget_mode && (
-                        <p className="text-sm text-destructive">{form.formState.errors.budget_mode.message}</p>
-                      )}
-                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <Label htmlFor="budget_amount">
-                        {form.watch("budget_mode") === "per_person" ? "Budget Per Person" : "Total Budget"}
-                      </Label>
+                      <Label htmlFor="budget_amount">Total Trip Budget</Label>
                       <Input 
                         id="budget_amount" 
                         type="number" 
@@ -976,29 +996,32 @@ export default function Home() {
                         </label>
                       </RadioGroup>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="max_flight_hours">Max Flight Duration (hours)</Label>
-                      <Input
-                        id="max_flight_hours"
-                        type="number"
-                        min={1}
-                        max={24}
-                        required
-                        className="h-12"
-                        {...form.register("max_flight_hours", { valueAsNumber: true })}
-                      />
-                      {form.formState.errors.max_flight_hours && (
-                        <p className="text-sm text-destructive">{form.formState.errors.max_flight_hours.message}</p>
-                      )}
-                    </div>
+                    {form.watch("includes_flights") && tripGoalValue !== "know_destination" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="max_flight_hours">Max Flight Duration (hours)</Label>
+                        <Input
+                          id="max_flight_hours"
+                          type="number"
+                          min={1}
+                          max={24}
+                          required
+                          className="h-12"
+                          {...form.register("max_flight_hours", { valueAsNumber: true })}
+                        />
+                        {form.formState.errors.max_flight_hours && (
+                          <p className="text-sm text-destructive">{form.formState.errors.max_flight_hours.message}</p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label>Travel Dates</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Input 
-                          type="date" 
+                  <div className="space-y-2">
+                    <Label>Travel Dates</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">From</Label>
+                        <Input
+                          type="date"
                           className="h-12"
                           required
                           min={todayDateString}
@@ -1024,8 +1047,11 @@ export default function Home() {
                             }
                           }}
                         />
-                        <Input 
-                          type="date" 
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">To</Label>
+                        <Input
+                          type="date"
                           className="h-12"
                           required
                           min={minEndDate}
@@ -1041,59 +1067,61 @@ export default function Home() {
                           }}
                         />
                       </div>
-                      {(form.formState.errors.startDate || form.formState.errors.endDate) && (
-                        <p className="text-sm text-destructive">
-                          {form.formState.errors.startDate?.message || form.formState.errors.endDate?.message}
-                        </p>
+                    </div>
+                    {(form.formState.errors.startDate || form.formState.errors.endDate) && (
+                      <p className="text-sm text-destructive">
+                        {form.formState.errors.startDate?.message || form.formState.errors.endDate?.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label>Travel Setup</Label>
+                      <Select
+                        onValueChange={(val) =>
+                          form.setValue("companions", val, { shouldValidate: true })
+                        }
+                        defaultValue={form.getValues("companions")}
+                      >
+                        <SelectTrigger className="h-12">
+                          <SelectValue placeholder="How are you traveling?" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {COMPANIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {form.formState.errors.companions && (
+                        <p className="text-sm text-destructive">{form.formState.errors.companions.message}</p>
                       )}
                     </div>
 
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Travel Setup</Label>
-                        <Select 
-                          onValueChange={(val) =>
-                            form.setValue("companions", val, { shouldValidate: true })
-                          }
-                          defaultValue={form.getValues("companions")}
-                        >
-                          <SelectTrigger className="h-12">
-                            <SelectValue placeholder="How are you traveling?" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {COMPANIONS.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {form.formState.errors.companions && (
-                          <p className="text-sm text-destructive">{form.formState.errors.companions.message}</p>
-                        )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="number_of_people">Number of People</Label>
-                        <Input
-                          id="number_of_people"
-                          type="number"
-                          min={1}
-                          max={companionsValue === "Solo" ? 1 : undefined}
-                          disabled={companionsValue === "Solo"}
-                          className="h-12"
-                          required
-                          {...form.register("number_of_people", { valueAsNumber: true })}
-                        />
-                        {companionsValue === "Solo" && (
-                          <p className="text-xs text-muted-foreground">
-                            Solo travel is fixed to 1 person.
-                          </p>
-                        )}
-                        {form.formState.errors.number_of_people && (
-                          <p className="text-sm text-destructive">{form.formState.errors.number_of_people.message}</p>
-                        )}
-                      </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="number_of_people">Number of People</Label>
+                      <Input
+                        id="number_of_people"
+                        type="number"
+                        min={1}
+                        max={companionsValue === "Solo" ? 1 : companionsValue === "Couple" ? 2 : undefined}
+                        disabled={companionsValue === "Solo" || companionsValue === "Couple"}
+                        className="h-12"
+                        required
+                        {...form.register("number_of_people", { valueAsNumber: true })}
+                      />
+                      {(companionsValue === "Solo" || companionsValue === "Couple") && (
+                        <p className="text-xs text-muted-foreground">
+                          {companionsValue === "Solo"
+                            ? "Solo travel is fixed to 1 person."
+                            : "Couple travel is fixed to 2 people."}
+                        </p>
+                      )}
+                      {form.formState.errors.number_of_people && (
+                        <p className="text-sm text-destructive">{form.formState.errors.number_of_people.message}</p>
+                      )}
                     </div>
                   </div>
 

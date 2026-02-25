@@ -192,7 +192,7 @@ export async function registerRoutes(
         baseURL: openAiBaseUrl,
       });
       const seniorCitizenGuidance =
-        input.companions === "Senior Citizens"
+        input.companions === "Senior Citizen Friendly"
           ? `
 Additional constraints for senior travelers:
 - Prioritize senior-friendly destinations with strong accessibility infrastructure.
@@ -255,9 +255,8 @@ Energy level: ${input.energy}
 Comfort level: ${input.comfort_level}
 Number of people: ${input.number_of_people}
 Budget amount: ${input.budget_amount} ${input.currency}
-Budget mode: ${input.budget_mode}
 Includes flights in budget: ${input.includes_flights ? "yes" : "no"}
-Max flight duration: ${input.max_flight_hours} hours
+Max flight duration: ${input.max_flight_hours ?? "Not specified"} hours
 Budget currency strength: ${currencyStrength}
 Activity intensity: ${input.activity}
 Social media importance: ${input.social}
@@ -290,7 +289,7 @@ Each itinerary item MUST include a specific time (e.g., "09:00 AM", "02:30 PM").
 Use the selected budget currency strength when deciding destination affordability.
 If budget currency is weak, bias toward better-value destinations and cost-efficient routing.
 If budget currency is strong, wider destination options are acceptable but still stay realistic.
-Respect budget mode and whether flights are included in budget.
+Respect whether flights are included in budget.
 Respect max flight duration when selecting/confirming destination and daily plan feasibility.
 Respect must-avoid constraints.
 Do not assume proximity to any specific country solely from the chosen currency; use starting location geography and trip type first.
@@ -441,9 +440,8 @@ User inputs:
 - Trip type: ${input.trip_type}
 - Number of people: ${input.number_of_people}
 - Budget amount: ${input.budget_amount} ${input.currency}
-- Budget mode: ${input.budget_mode}
 - Includes flights: ${input.includes_flights ? "yes" : "no"}
-- Max flight duration: ${input.max_flight_hours} hours
+- Max flight duration: ${input.max_flight_hours ?? "Not specified"} hours
 - Comfort level: ${input.comfort_level}
 - Companions: ${input.companions}
 - Must avoid: ${input.must_avoid || "None specified"}
