@@ -70,6 +70,7 @@ export default function Home() {
 
   const THEMES = ["Nature", "City", "Adventure", "Relaxation", "Culture", "History", "Nightlife", "Shopping"];
   const COMPANIONS = ["Solo", "Couple", "Family with Kids", "Friends Group"];
+  const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "INR"];
 
   return (
     <Layout>
@@ -127,7 +128,7 @@ export default function Home() {
                           <SelectValue placeholder="Select Currency" />
                         </SelectTrigger>
                         <SelectContent>
-                          {["USD", "EUR", "GBP", "JPY", "AUD", "CAD"].map(c => (
+                          {CURRENCIES.map(c => (
                             <SelectItem key={c} value={c}>{c}</SelectItem>
                           ))}
                         </SelectContent>

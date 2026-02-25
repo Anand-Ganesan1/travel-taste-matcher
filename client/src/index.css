@@ -36,6 +36,10 @@
   /* Cards */
   --card: 0 0% 100%;
   --card-foreground: 200 50% 10%;
+
+  /* Popovers / dropdowns */
+  --popover: 0 0% 100%;
+  --popover-foreground: 200 50% 10%;
   
   /* Borders */
   --border: 180 20% 90%;
