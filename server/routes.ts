@@ -5,11 +5,13 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import OpenAI from "openai";
 
-// Initialize OpenAI with Replit AI Integration env vars
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+function cleanEnv(value?: string): string | undefined {
+  if (!value) return undefined;
+  return value
+    .trim()
+    .replace(/[\u00A0\u1680\u2000-\u200F\u2028\u2029\u202F\u205F\u3000]/g, "")
+    .replace(/^['"]|['"]$/g, "");
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -18,6 +20,25 @@ export async function registerRoutes(
   app.post(api.trips.generate.path, async (req, res) => {
     try {
       const input = api.trips.generate.input.parse(req.body);
+      const openAiApiKey = cleanEnv(
+        process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+      );
+      const openAiBaseUrl = cleanEnv(
+        process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL,
+      );
+      const model = cleanEnv(process.env.OPENAI_MODEL) || "gpt-4o-mini";
+
+      if (!openAiApiKey) {
+        return res.status(500).json({
+          message:
+            "OpenAI API key is missing. Set OPENAI_API_KEY (or AI_INTEGRATIONS_OPENAI_API_KEY) and restart the server.",
+        });
+      }
+
+      const openai = new OpenAI({
+        apiKey: openAiApiKey,
+        baseURL: openAiBaseUrl,
+      });
 
       const prompt = `
 You are a travel planner AI that designs trips based on personality and vibe.
@@ -80,7 +101,7 @@ Do NOT include explanations or markdown.
 `;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-5.2",
+        model,
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
       });
@@ -100,6 +121,59 @@ Do NOT include explanations or markdown.
           field: err.errors[0].path.join('.'),
         });
       }
+
+      const apiError = err as {
+        status?: number;
+        code?: string;
+        type?: string;
+        message?: string;
+        error?: {
+          code?: string;
+          type?: string;
+          message?: string;
+        };
+      };
+      const errorCode = apiError.code || apiError.error?.code;
+      const errorType = apiError.type || apiError.error?.type;
+      const errorMessage = apiError.message || apiError.error?.message;
+
+      if (apiError.status === 401 || errorCode === "invalid_api_key") {
+        return res.status(500).json({
+          message:
+            "Invalid OpenAI API key. Update OPENAI_API_KEY (or AI_INTEGRATIONS_OPENAI_API_KEY) and restart the server.",
+        });
+      }
+
+      if (apiError.status === 404 || errorCode === "model_not_found") {
+        return res.status(500).json({
+          message:
+            "Configured OpenAI model is unavailable. Set OPENAI_MODEL to an accessible model (e.g. gpt-4o-mini).",
+        });
+      }
+
+      if (
+        apiError.status === 429 ||
+        errorCode === "insufficient_quota" ||
+        errorType === "insufficient_quota"
+      ) {
+        return res.status(500).json({
+          message:
+            "OpenAI quota exceeded for this API key. Add billing/credits in your OpenAI account and retry.",
+        });
+      }
+
+      if (apiError.status === 400 && errorMessage) {
+        return res.status(500).json({
+          message: `OpenAI request failed: ${errorMessage}`,
+        });
+      }
+
+      if (errorMessage) {
+        return res.status(500).json({
+          message: `Generation failed: ${errorMessage}`,
+        });
+      }
+
       res.status(500).json({ message: "Failed to generate itinerary" });
     }
   });
