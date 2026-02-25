@@ -8,11 +8,19 @@ export const tripRequestSchema = z.object({
   trip_goal: z.enum(["need_recommendation", "know_destination"], {
     required_error: "Please select how you want to plan your trip",
   }),
+  comfort_level: z.enum(["budget", "medium", "premium"], {
+    required_error: "Please select comfort level",
+  }),
   trip_type: z.enum(["domestic", "international"], {
     required_error: "Please select domestic or international travel",
   }),
   energy: z.number().min(1).max(5),
-  budget_level: z.number().min(1).max(5),
+  number_of_people: z.number().int().min(1, "Number of people is required"),
+  budget_mode: z.enum(["total", "per_person"], {
+    required_error: "Please select budget mode",
+  }),
+  includes_flights: z.boolean(),
+  max_flight_hours: z.number().min(1, "Max flight duration is required").max(24),
   budget_amount: z.number().positive("Budget amount is required"),
   currency: z.string().min(1, "Currency is required"),
   activity: z.number().min(1).max(5),
@@ -26,6 +34,7 @@ export const tripRequestSchema = z.object({
   endDate: z.string().min(1, "End date is required"),
   location: z.string().trim().min(1, "Starting location is required"),
   destination_location: z.string().trim().optional(),
+  must_avoid: z.string().trim().optional(),
   companions: z.string().min(1, "Companions is required"),
   personality: z.object({
     spontaneity: z.number().min(1).max(5),
@@ -86,5 +95,30 @@ export const tripResponseSchema = z.object({
   documents: z.array(z.string()),
 });
 
+export const destinationOptionSchema = z.object({
+  destination: z.string(),
+  country: z.string(),
+  summary: z.string(),
+  estimated_budget: z.object({
+    low: z.number(),
+    high: z.number(),
+    currency: z.string(),
+  }),
+  metrics: z.object({
+    vibe_fit: z.number().min(1).max(10),
+    affordability: z.number().min(1).max(10),
+    travel_convenience: z.number().min(1).max(10),
+    safety_accessibility: z.number().min(1).max(10),
+    total_score: z.number().min(1).max(10),
+  }),
+});
+
+export const destinationRecommendationResponseSchema = z.object({
+  options: z.array(destinationOptionSchema).min(3).max(3),
+});
+
 export type TripRequest = z.infer<typeof tripRequestSchema>;
 export type TripResponse = z.infer<typeof tripResponseSchema>;
+export type DestinationRecommendationResponse = z.infer<
+  typeof destinationRecommendationResponseSchema
+>;

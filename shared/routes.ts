@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { tripRequestSchema, tripResponseSchema } from './schema';
+import {
+  destinationRecommendationResponseSchema,
+  tripRequestSchema,
+  tripResponseSchema,
+} from './schema';
 
 export const errorSchemas = {
   validation: z.object({
@@ -13,6 +17,16 @@ export const errorSchemas = {
 
 export const api = {
   trips: {
+    recommend: {
+      method: 'POST' as const,
+      path: '/api/recommend-destinations' as const,
+      input: tripRequestSchema,
+      responses: {
+        200: destinationRecommendationResponseSchema,
+        400: errorSchemas.validation,
+        500: errorSchemas.internal,
+      },
+    },
     generate: {
       method: 'POST' as const,
       path: '/api/generate-itinerary' as const,

@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { api } from "@shared/routes";
 import { tripRequestSchema, type TripRequest } from "@shared/schema";
 import { useGenerateTrip } from "@/hooks/use-trips";
+import { useToast } from "@/hooks/use-toast";
 import { Layout } from "@/components/Layout";
 import { WizardStep } from "@/components/WizardStep";
 import { Button } from "@/components/ui/button";
@@ -13,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Plane, Compass, Sparkles, Coffee } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -31,11 +34,30 @@ function toLocalDateString(date: Date): string {
 
 type TripType = "domestic" | "international";
 type TripGoal = "need_recommendation" | "know_destination";
+type ComfortLevel = "budget" | "medium" | "premium";
 
 type LocationSuggestion = {
   city: string;
   country: string;
   displayName: string;
+};
+
+type DestinationOption = {
+  destination: string;
+  country: string;
+  summary: string;
+  estimated_budget: {
+    low: number;
+    high: number;
+    currency: string;
+  };
+  metrics: {
+    vibe_fit: number;
+    affordability: number;
+    travel_convenience: number;
+    safety_accessibility: number;
+    total_score: number;
+  };
 };
 
 const CURRENCY_TO_INR: Record<string, number> = {
@@ -163,18 +185,24 @@ function getCurrencyStrengthMultiplier(currency: string): number {
 
 function estimateBudgetRangeInInr({
   days,
-  companions,
+  numberOfPeople,
   tripType,
   currency,
   startLocation,
+  comfortLevel,
+  includesFlights,
+  maxFlightHours,
 }: {
   days: number;
-  companions: string;
+  numberOfPeople: number;
   tripType: TripType;
   currency: string;
   startLocation: string;
+  comfortLevel: ComfortLevel;
+  includesFlights: boolean;
+  maxFlightHours: number;
 }): { low: number; high: number } {
-  const travelers = COMPANION_SIZE[companions] ?? 2;
+  const travelers = Math.max(1, numberOfPeople);
   const domestic = tripType === "domestic";
   const originCountry = getCountryFromLocation(startLocation);
 
@@ -190,9 +218,28 @@ function estimateBudgetRangeInInr({
     ? DOMESTIC_COST_MULTIPLIER_BY_COUNTRY[originCountry || ""] || 1
     : getInternationalOriginMultiplier(originCountry);
   const currencyMultiplier = domestic ? 1 : getCurrencyStrengthMultiplier(currency);
+  const comfortMultiplier =
+    comfortLevel === "budget" ? 0.85 : comfortLevel === "premium" ? 1.35 : 1;
+  const flightBudgetMultiplier = includesFlights ? 1 : 0.78;
+  const flightDurationMultiplier =
+    tripType === "international" ? (maxFlightHours <= 6 ? 0.9 : maxFlightHours >= 12 ? 1.1 : 1) : 1;
 
-  const low = Math.round(baseLow * geoMultiplier * currencyMultiplier);
-  const high = Math.round(baseHigh * geoMultiplier * currencyMultiplier);
+  const low = Math.round(
+    baseLow *
+      geoMultiplier *
+      currencyMultiplier *
+      comfortMultiplier *
+      flightBudgetMultiplier *
+      flightDurationMultiplier,
+  );
+  const high = Math.round(
+    baseHigh *
+      geoMultiplier *
+      currencyMultiplier *
+      comfortMultiplier *
+      flightBudgetMultiplier *
+      flightDurationMultiplier,
+  );
   return { low, high };
 }
 
@@ -238,6 +285,7 @@ function getBudgetGuidanceNote({
 }
 
 export default function Home() {
+  const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(0);
   const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
   const [isLocationLoading, setIsLocationLoading] = useState(false);
@@ -247,6 +295,10 @@ export default function Home() {
   const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false);
   const [isAnalysingBasics, setIsAnalysingBasics] = useState(false);
   const [budgetFeedback, setBudgetFeedback] = useState<string | null>(null);
+  const [allowProceedAnyway, setAllowProceedAnyway] = useState(false);
+  const [isFindingDestinations, setIsFindingDestinations] = useState(false);
+  const [destinationOptions, setDestinationOptions] = useState<DestinationOption[]>([]);
+  const [selectedDestination, setSelectedDestination] = useState<string>("");
   const generateTrip = useGenerateTrip();
   const todayDate = new Date();
 
@@ -254,11 +306,15 @@ export default function Home() {
     resolver: zodResolver(tripRequestSchema),
     defaultValues: {
       trip_goal: "need_recommendation",
+      comfort_level: "medium",
       trip_type: "domestic",
       location: "",
       destination_location: "",
+      number_of_people: 2,
+      budget_mode: "total",
+      includes_flights: true,
+      max_flight_hours: 8,
       days: 3,
-      budget_level: 3,
       budget_amount: 1000,
       currency: "USD",
       companions: "Couple",
@@ -284,7 +340,21 @@ export default function Home() {
     // Validate current step fields before proceeding
     let fieldsToValidate: (keyof TripRequest)[] = [];
     if (currentStep === 0) {
-      fieldsToValidate = ['trip_goal', 'location', 'days', 'companions', 'currency', 'budget_amount', 'startDate', 'endDate'];
+      fieldsToValidate = [
+        'trip_goal',
+        'comfort_level',
+        'location',
+        'number_of_people',
+        'budget_mode',
+        'includes_flights',
+        'max_flight_hours',
+        'days',
+        'companions',
+        'currency',
+        'budget_amount',
+        'startDate',
+        'endDate',
+      ];
       if (form.getValues("trip_goal") !== "know_destination") {
         fieldsToValidate.push("trip_type");
       }
@@ -300,6 +370,7 @@ export default function Home() {
     if (currentStep === 0) {
       setIsAnalysingBasics(true);
       setBudgetFeedback(null);
+      setAllowProceedAnyway(false);
 
       await new Promise((resolve) => setTimeout(resolve, 700));
 
@@ -311,13 +382,26 @@ export default function Home() {
             (1000 * 60 * 60 * 24),
         ),
       );
-      const budgetInInr = values.budget_amount * (CURRENCY_TO_INR[values.currency] ?? 1);
+      const normalizedBudgetAmount =
+        values.budget_mode === "per_person"
+          ? values.budget_amount * values.number_of_people
+          : values.budget_amount;
+      const budgetInInr = normalizedBudgetAmount * (CURRENCY_TO_INR[values.currency] ?? 1);
+      const effectiveTripType: TripType =
+        values.trip_goal === "know_destination" && values.destination_location
+          ? (getCountryFromLocation(values.location) === getCountryFromLocation(values.destination_location)
+              ? "domestic"
+              : "international")
+          : values.trip_type;
       const recommendedRangeInInr = estimateBudgetRangeInInr({
         days: tripDays,
-        companions: values.companions,
-        tripType: values.trip_type,
+        numberOfPeople: values.number_of_people,
+        tripType: effectiveTripType,
         currency: values.currency,
         startLocation: values.location,
+        comfortLevel: values.comfort_level,
+        includesFlights: values.includes_flights,
+        maxFlightHours: values.max_flight_hours,
       });
       const lowInSelectedCurrency = convertInrToCurrency(
         recommendedRangeInInr.low,
@@ -329,14 +413,16 @@ export default function Home() {
       );
       const guidanceNote = getBudgetGuidanceNote({
         currency: values.currency,
-        tripType: values.trip_type,
+        tripType: effectiveTripType,
         startLocation: values.location,
       });
 
       if (budgetInInr < recommendedRangeInInr.low) {
+        const closeToRange = budgetInInr >= recommendedRangeInInr.low * 0.75;
         setBudgetFeedback(
-          `Your budget looks low for this setup. A more realistic range is ${formatAmount(lowInSelectedCurrency, values.currency)} to ${formatAmount(highInSelectedCurrency, values.currency)} for ${tripDays} day(s), ${values.companions.toLowerCase()}, and ${values.trip_type} travel. ${guidanceNote}`,
+          `Your budget looks low for this setup. A more realistic range is ${formatAmount(lowInSelectedCurrency, values.currency)} to ${formatAmount(highInSelectedCurrency, values.currency)} for ${tripDays} day(s), ${values.number_of_people} traveler(s), and ${effectiveTripType} travel. ${guidanceNote}`,
         );
+        setAllowProceedAnyway(closeToRange);
         setIsAnalysingBasics(false);
         return;
       }
@@ -348,7 +434,55 @@ export default function Home() {
 
   const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
 
-  const onSubmit = (data: TripRequest) => {
+  const onSubmit = async (data: TripRequest) => {
+    if (data.trip_goal === "need_recommendation") {
+      if (!destinationOptions.length) {
+        try {
+          setIsFindingDestinations(true);
+          const response = await fetch(api.trips.recommend.path, {
+            method: api.trips.recommend.method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || "Failed to find destinations");
+          }
+          const result = api.trips.recommend.responses[200].parse(await response.json());
+          setDestinationOptions(result.options);
+          if (result.options[0]) {
+            setSelectedDestination(
+              `${result.options[0].destination}, ${result.options[0].country}`,
+            );
+          }
+          return;
+        } catch (error) {
+          toast({
+            title: "Destination Search Failed",
+            description:
+              error instanceof Error ? error.message : "Failed to find destinations",
+            variant: "destructive",
+          });
+          return;
+        } finally {
+          setIsFindingDestinations(false);
+        }
+      }
+      if (!selectedDestination) {
+        toast({
+          title: "Select a Destination",
+          description: "Pick one recommended destination to continue.",
+          variant: "destructive",
+        });
+        return;
+      }
+      generateTrip.mutate({
+        ...data,
+        trip_goal: "know_destination",
+        destination_location: selectedDestination,
+      });
+      return;
+    }
     generateTrip.mutate(data);
   };
 
@@ -358,8 +492,14 @@ export default function Home() {
   const todayDateString = toLocalDateString(todayDate);
   const tripGoalValue = form.watch("trip_goal");
   const startDateValue = form.watch("startDate");
+  const endDateValue = form.watch("endDate");
   const locationValue = form.watch("location");
   const destinationValue = form.watch("destination_location");
+  const themesValue = form.watch("themes");
+  const foodValue = form.watch("food");
+  const weatherValue = form.watch("weather");
+  const currencyValue = form.watch("currency");
+  const budgetAmountValue = form.watch("budget_amount");
   const minEndDate = startDateValue
     ? new Date(new Date(startDateValue).getTime() + 24 * 60 * 60 * 1000)
         .toISOString()
@@ -448,6 +588,21 @@ export default function Home() {
       fromCountry.toLowerCase() === toCountry.toLowerCase() ? "domestic" : "international";
     form.setValue("trip_type", inferredTripType, { shouldValidate: true });
   }, [tripGoalValue, locationValue, destinationValue, form]);
+
+  useEffect(() => {
+    setDestinationOptions([]);
+    setSelectedDestination("");
+  }, [
+    tripGoalValue,
+    themesValue,
+    foodValue,
+    weatherValue,
+    currencyValue,
+    budgetAmountValue,
+    startDateValue,
+    endDateValue,
+    locationValue,
+  ]);
 
   return (
     <Layout>
@@ -538,6 +693,30 @@ export default function Home() {
                       Travel type will be auto-detected based on your starting and destination countries.
                     </div>
                   )}
+
+                  <div className="space-y-2">
+                    <Label>Comfort Level</Label>
+                    <Select
+                      onValueChange={(val) =>
+                        form.setValue("comfort_level", val as ComfortLevel, {
+                          shouldValidate: true,
+                        })
+                      }
+                      defaultValue={form.getValues("comfort_level")}
+                    >
+                      <SelectTrigger className="h-12">
+                        <SelectValue placeholder="Select comfort level" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="budget">Budget</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="premium">Premium</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {form.formState.errors.comfort_level && (
+                      <p className="text-sm text-destructive">{form.formState.errors.comfort_level.message}</p>
+                    )}
+                  </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="location">Starting Location</Label>
@@ -653,7 +832,9 @@ export default function Home() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="budget_amount">Total Budget</Label>
+                      <Label htmlFor="budget_amount">
+                        {form.watch("budget_mode") === "per_person" ? "Budget Per Person" : "Total Budget"}
+                      </Label>
                       <Input 
                         id="budget_amount" 
                         type="number" 
@@ -664,6 +845,84 @@ export default function Home() {
                       />
                       {form.formState.errors.budget_amount && (
                         <p className="text-sm text-destructive">{form.formState.errors.budget_amount.message}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="number_of_people">Number of People</Label>
+                      <Input
+                        id="number_of_people"
+                        type="number"
+                        min={1}
+                        className="h-12"
+                        required
+                        {...form.register("number_of_people", { valueAsNumber: true })}
+                      />
+                      {form.formState.errors.number_of_people && (
+                        <p className="text-sm text-destructive">{form.formState.errors.number_of_people.message}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Budget Mode</Label>
+                      <Select
+                        onValueChange={(val) =>
+                          form.setValue("budget_mode", val as "total" | "per_person", {
+                            shouldValidate: true,
+                          })
+                        }
+                        defaultValue={form.getValues("budget_mode")}
+                      >
+                        <SelectTrigger className="h-12">
+                          <SelectValue placeholder="Select budget mode" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="total">Total Trip Budget</SelectItem>
+                          <SelectItem value="per_person">Per Person Budget</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {form.formState.errors.budget_mode && (
+                        <p className="text-sm text-destructive">{form.formState.errors.budget_mode.message}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label>Includes Flights</Label>
+                      <RadioGroup
+                        value={form.watch("includes_flights") ? "yes" : "no"}
+                        onValueChange={(val) =>
+                          form.setValue("includes_flights", val === "yes", {
+                            shouldValidate: true,
+                          })
+                        }
+                        className="grid grid-cols-2 gap-4"
+                      >
+                        <label className="flex items-center gap-3 rounded-md border border-input p-3 cursor-pointer">
+                          <RadioGroupItem value="yes" id="includes_flights_yes" />
+                          <span>Yes</span>
+                        </label>
+                        <label className="flex items-center gap-3 rounded-md border border-input p-3 cursor-pointer">
+                          <RadioGroupItem value="no" id="includes_flights_no" />
+                          <span>No</span>
+                        </label>
+                      </RadioGroup>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="max_flight_hours">Max Flight Duration (hours)</Label>
+                      <Input
+                        id="max_flight_hours"
+                        type="number"
+                        min={1}
+                        max={24}
+                        required
+                        className="h-12"
+                        {...form.register("max_flight_hours", { valueAsNumber: true })}
+                      />
+                      {form.formState.errors.max_flight_hours && (
+                        <p className="text-sm text-destructive">{form.formState.errors.max_flight_hours.message}</p>
                       )}
                     </div>
                   </div>
@@ -749,9 +1008,33 @@ export default function Home() {
                   {budgetFeedback && (
                     <Alert variant="destructive">
                       <AlertTitle>Budget May Be Insufficient</AlertTitle>
-                      <AlertDescription>{budgetFeedback}</AlertDescription>
+                      <AlertDescription className="space-y-3">
+                        <p>{budgetFeedback}</p>
+                        {allowProceedAnyway && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setBudgetFeedback(null);
+                              setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1));
+                            }}
+                          >
+                            Proceed Anyway
+                          </Button>
+                        )}
+                      </AlertDescription>
                     </Alert>
                   )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="must_avoid">Must Avoid (Optional)</Label>
+                    <Textarea
+                      id="must_avoid"
+                      placeholder="e.g. avoid nightlife, avoid heavy walking, avoid humid weather, no long flights"
+                      className="min-h-[92px]"
+                      {...form.register("must_avoid")}
+                    />
+                  </div>
                 </div>
               </WizardStep>
             )}
@@ -768,15 +1051,6 @@ export default function Home() {
                     icon={<Coffee className="w-5 h-5 text-primary" />}
                   />
                   
-                  <PreferenceSlider 
-                    label="Budget" 
-                    leftLabel="Budget" 
-                    rightLabel="Luxury"
-                    value={form.watch("budget_level")}
-                    onChange={(val) => form.setValue("budget_level", val[0])}
-                    icon={<Sparkles className="w-5 h-5 text-primary" />}
-                  />
-
                   <PreferenceSlider 
                     label="Activity Level" 
                     leftLabel="Leisurely" 
@@ -882,6 +1156,48 @@ export default function Home() {
             )}
           </AnimatePresence>
 
+          {currentStep === 2 && tripGoalValue === "need_recommendation" && destinationOptions.length > 0 && (
+            <div className="mt-8 space-y-4">
+              <Label className="text-lg font-semibold">Top Destination Options</Label>
+              <div className="grid gap-4">
+                {destinationOptions.map((option, index) => {
+                  const destinationLabel = `${option.destination}, ${option.country}`;
+                  const isSelected = selectedDestination === destinationLabel;
+                  return (
+                    <button
+                      key={destinationLabel}
+                      type="button"
+                      className={`w-full text-left rounded-lg border p-4 transition ${
+                        isSelected
+                          ? "border-primary bg-primary/5"
+                          : "border-input hover:border-primary/40"
+                      }`}
+                      onClick={() => setSelectedDestination(destinationLabel)}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Rank #{index + 1}</p>
+                          <p className="text-lg font-semibold">{destinationLabel}</p>
+                          <p className="text-sm text-muted-foreground mt-1">{option.summary}</p>
+                          <p className="text-sm mt-2">
+                            Budget: {formatAmount(option.estimated_budget.low, option.estimated_budget.currency)} -{" "}
+                            {formatAmount(option.estimated_budget.high, option.estimated_budget.currency)}
+                          </p>
+                        </div>
+                        <div className="text-right text-sm">
+                          <p className="font-semibold">Score {option.metrics.total_score}/10</p>
+                          <p className="text-muted-foreground">Vibe {option.metrics.vibe_fit}/10</p>
+                          <p className="text-muted-foreground">Affordable {option.metrics.affordability}/10</p>
+                          <p className="text-muted-foreground">Convenience {option.metrics.travel_convenience}/10</p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="mt-8 flex justify-between">
             <Button 
               type="button" 
@@ -912,14 +1228,23 @@ export default function Home() {
             ) : (
               <Button 
                 type="submit" 
-                disabled={generateTrip.isPending}
+                disabled={generateTrip.isPending || isFindingDestinations}
                 className="w-40 bg-accent hover:bg-accent/90 text-accent-foreground font-semibold shadow-lg shadow-accent/20 transition-all hover:-translate-y-0.5"
               >
-                {generateTrip.isPending ? (
+                {isFindingDestinations ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Finding...
+                  </>
+                ) : generateTrip.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Planning...
                   </>
+                ) : currentStep === 2 && tripGoalValue === "need_recommendation" && destinationOptions.length === 0 ? (
+                  "Find Destinations"
+                ) : currentStep === 2 && tripGoalValue === "need_recommendation" ? (
+                  "Generate Itinerary"
                 ) : (
                   "Generate Trip"
                 )}
