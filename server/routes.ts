@@ -144,12 +144,21 @@ Additional constraints for senior travelers:
 `
           : "";
       const originCountry = getCountryFromLocation(input.location);
+      const destinationCountry = input.destination_location
+        ? getCountryFromLocation(input.destination_location)
+        : undefined;
+      const inferredTripType =
+        input.trip_goal === "know_destination" && originCountry && destinationCountry
+          ? originCountry.toLowerCase() === destinationCountry.toLowerCase()
+            ? "domestic"
+            : "international"
+          : input.trip_type;
       const nearbyValueOptions = nearbyValueDestinationsByCountry[originCountry || ""] || [];
       const nearbyValueOptionsText = nearbyValueOptions.length
         ? nearbyValueOptions.join(", ")
         : "nearby value destinations in the same broad region";
       const tripTypeGuidance =
-        input.trip_type === "domestic"
+        inferredTripType === "domestic"
           ? `
 Trip type requirement:
 - User wants a domestic trip.
@@ -163,6 +172,19 @@ Trip type requirement:
 - Since user is a citizen of the starting location country, include relevant visa/entry reminders.
 `;
       const currencyStrength = currencyStrengthGuidanceMap[input.currency] || "medium";
+      const destinationPlanningGuidance =
+        input.trip_goal === "know_destination" && input.destination_location
+          ? `
+Destination planning mode:
+- User already selected destination: ${input.destination_location}
+- Do NOT change destination. Build the itinerary specifically for this destination.
+- Optimize travel plan, activities, and pacing for this exact destination based on user vibe/persona.
+`
+          : `
+Destination recommendation mode:
+- User wants destination suggestions.
+- Recommend ONE destination that best fits budget, trip type, and preferences.
+`;
 
       const prompt = `
 You are a travel planner AI that designs trips based on personality and vibe.
@@ -180,9 +202,12 @@ Food preference: ${input.food}
 Weather preference: ${input.weather}
 Travel dates: ${input.startDate} to ${input.endDate} (${input.days} days)
 Starting location: ${input.location}
-Trip type selected: ${input.trip_type}
+Trip planning mode: ${input.trip_goal}
+User provided destination: ${input.destination_location || "None"}
+Trip type selected: ${inferredTripType}
 Assume the traveler is a citizen of the country in the starting location.
 Detected origin country: ${originCountry || "Unknown"}
+Detected destination country: ${destinationCountry || "Unknown"}
 Nearby value destinations from this origin: ${nearbyValueOptionsText}
 Traveling with: ${input.companions}
 Personality traits (1-5): Spontaneity: ${input.personality.spontaneity}, Organization: ${input.personality.organization}, Curiosity: ${input.personality.curiosity}
@@ -190,7 +215,7 @@ Personality traits (1-5): Spontaneity: ${input.personality.spontaneity}, Organiz
 Generate a personalized travel plan.
 
 Requirements:
-Pick ONE destination that fits the weather preference for the given dates and budget.
+${input.trip_goal === "know_destination" ? "Use the provided destination and keep itinerary realistic for that destination." : "Pick ONE destination that fits the weather preference for the given dates and budget."}
 Create a trip theme name.
 Match daily energy levels.
 Include a realistic packing list.
@@ -202,6 +227,7 @@ If budget currency is strong, wider destination options are acceptable but still
 Do not assume proximity to any specific country solely from the chosen currency; use starting location geography and trip type first.
 ${seniorCitizenGuidance}
 ${tripTypeGuidance}
+${destinationPlanningGuidance}
 
 Respond ONLY in valid JSON using the following schema:
 {

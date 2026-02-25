@@ -5,6 +5,9 @@ import { z } from "zod";
 // We don't need a DB for this MVP, but we'll define the schemas here for shared types
 
 export const tripRequestSchema = z.object({
+  trip_goal: z.enum(["need_recommendation", "know_destination"], {
+    required_error: "Please select how you want to plan your trip",
+  }),
   trip_type: z.enum(["domestic", "international"], {
     required_error: "Please select domestic or international travel",
   }),
@@ -22,23 +25,36 @@ export const tripRequestSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().min(1, "End date is required"),
   location: z.string().trim().min(1, "Starting location is required"),
+  destination_location: z.string().trim().optional(),
   companions: z.string().min(1, "Companions is required"),
   personality: z.object({
     spontaneity: z.number().min(1).max(5),
     organization: z.number().min(1).max(5),
     curiosity: z.number().min(1).max(5),
   }),
-}).refine(
-  ({ startDate, endDate }) => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    return !isNaN(start.getTime()) && !isNaN(end.getTime()) && end > start;
-  },
-  {
-    message: "End date must be after start date",
-    path: ["endDate"],
-  },
-);
+}).superRefine((data, ctx) => {
+  const { startDate, endDate } = data;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "End date must be after start date",
+      path: ["endDate"],
+    });
+  }
+
+  if (
+    data.trip_goal === "know_destination" &&
+    (!data.destination_location || data.destination_location.trim().length === 0)
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Destination location is required",
+      path: ["destination_location"],
+    });
+  }
+});
 
 export const dailyPlanSchema = z.object({
   day: z.number(),
