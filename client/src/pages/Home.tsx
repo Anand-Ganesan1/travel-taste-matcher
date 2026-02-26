@@ -10,19 +10,18 @@ import { WizardStep } from "@/components/WizardStep";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Plane, Compass, Sparkles, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Helper for multi-step form
 const STEPS = [
   { id: 'basics', title: 'The Basics', desc: 'Set your trip essentials so we can personalize recommendations.' },
-  { id: 'details', title: 'Finishing Touches', desc: 'Share your interests and personality so we can refine your trip.' },
+  { id: 'budget', title: 'Trip Setup', desc: 'Set budget and traveler details for realistic recommendations.' },
+  { id: 'details', title: 'Travel Persona', desc: 'Help us score your vibe with a structured prediction model.' },
 ] as const;
 
 function toLocalDateString(date: Date): string {
@@ -369,23 +368,56 @@ export default function Home() {
       budget_amount: 1000,
       currency: "INR",
       companions: "Couple",
-      energy: 3,
-      activity: 3,
-      social: 3,
-      aesthetic: 3,
-      themes: [],
-      food: "Local Street Food",
-      weather: "Sunny & Warm",
+      emotional_goals: ["Relaxed"],
+      daily_pace: "balanced",
+      excitement_focus: ["Nature & landscapes", "Food"],
+      setting_preference: ["beaches"],
+      discomfort_appetite: "some_novelty",
+      food_personality: "local_street_food",
+      social_vibe: "romantic_couple",
+      budget_mindset: "balanced",
+      past_trip_loved: "",
       startDate: toLocalDateString(todayDate),
       endDate: toLocalDateString(new Date(todayDate.getTime() + 3 * 24 * 60 * 60 * 1000)),
-      personality: {
-        spontaneity: 3,
-        organization: 3,
-        curiosity: 3,
-      }
     },
     mode: "onChange"
   });
+
+  const scrollToField = (field: keyof TripRequest) => {
+    if (typeof document === "undefined") return;
+    const fieldIdMap: Partial<Record<keyof TripRequest, string>> = {
+      trip_goal: "trip_goal_need_recommendation",
+      trip_type: "trip_type_domestic",
+      location: "location",
+      destination_location: "destination_location",
+      startDate: "startDate",
+      endDate: "endDate",
+      companions: "companions",
+      number_of_people: "number_of_people",
+      currency: "currency",
+      budget_amount: "budget_amount",
+      includes_flights: "includes_flights_yes",
+      max_flight_hours: "max_flight_hours",
+      emotional_goals: "emotion-0",
+      daily_pace: "daily_pace",
+      excitement_focus: "focus-0",
+      setting_preference: "setting-0",
+      discomfort_appetite: "discomfort_appetite",
+      food_personality: "food_personality",
+      social_vibe: "social_vibe",
+      budget_mindset: "budget_mindset",
+      past_trip_loved: "past_trip_loved",
+    };
+    const targetId = fieldIdMap[field] || String(field);
+    const target =
+      document.getElementById(targetId) ||
+      (document.querySelector(`[name="${targetId}"]`) as HTMLElement | null);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    if ("focus" in target && typeof target.focus === "function") {
+      target.focus();
+    }
+  };
 
   const nextStep = async () => {
     // Validate current step fields before proceeding
@@ -394,12 +426,7 @@ export default function Home() {
       fieldsToValidate = [
         'trip_goal',
         'location',
-        'number_of_people',
-        'includes_flights',
         'days',
-        'companions',
-        'currency',
-        'budget_amount',
         'startDate',
         'endDate',
       ];
@@ -409,14 +436,41 @@ export default function Home() {
       if (form.getValues("trip_goal") === "know_destination") {
         fieldsToValidate.push("destination_location");
       }
+    }
+    if (currentStep === 1) {
+      fieldsToValidate = [
+        "companions",
+        "number_of_people",
+        "currency",
+        "budget_amount",
+        "includes_flights",
+      ];
       if (form.getValues("includes_flights") && form.getValues("trip_goal") !== "know_destination") {
         fieldsToValidate.push("max_flight_hours");
       }
     }
+    if (currentStep === 2) {
+      fieldsToValidate = [
+        "emotional_goals",
+        "daily_pace",
+        "excitement_focus",
+        "setting_preference",
+        "discomfort_appetite",
+        "food_personality",
+        "social_vibe",
+        "budget_mindset",
+      ];
+    }
     const isValid = await form.trigger(fieldsToValidate);
-    if (!isValid) return;
+    if (!isValid) {
+      const firstInvalidField = fieldsToValidate.find((field) => form.getFieldState(field).invalid);
+      if (firstInvalidField) {
+        scrollToField(firstInvalidField);
+      }
+      return;
+    }
 
-    if (currentStep === 0) {
+    if (currentStep === 1) {
       setIsAnalysingBasics(true);
       setBudgetFeedback(null);
       setAllowProceedAnyway(false);
@@ -473,6 +527,7 @@ export default function Home() {
         );
         setAllowProceedAnyway(closeToRange && !tooInsufficientWithFlights);
         setIsAnalysingBasics(false);
+        window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
       setIsAnalysingBasics(false);
@@ -545,7 +600,25 @@ export default function Home() {
     generateTrip.mutate(data);
   };
 
-  const THEMES = ["Nature", "City", "Adventure", "Relaxation", "Culture", "History", "Nightlife", "Shopping"];
+  const EMOTIONAL_GOALS = [
+    "Relaxed",
+    "Energized",
+    "Inspired",
+    "Indulgent",
+    "Adventurous",
+    "Connected (people/culture)",
+    "Disconnected (digital detox)",
+  ];
+  const EXCITEMENT_FOCUS = [
+    "Nature & landscapes",
+    "Food",
+    "History & culture",
+    "Nightlife",
+    "Shopping",
+    "Spa and Wellness",
+    "Luxury stays",
+    "Adventure sports and activities",
+  ];
   const COMPANIONS: CompanionOption[] = [
     { value: "Solo", label: "Solo Traveler" },
     { value: "Couple", label: "Couple" },
@@ -561,12 +634,21 @@ export default function Home() {
   const endDateValue = form.watch("endDate");
   const locationValue = form.watch("location");
   const destinationValue = form.watch("destination_location");
-  const themesValue = form.watch("themes");
-  const foodValue = form.watch("food");
-  const weatherValue = form.watch("weather");
+  const emotionalGoalsValue = form.watch("emotional_goals");
+  const dailyPaceValue = form.watch("daily_pace");
+  const excitementFocusValue = form.watch("excitement_focus");
+  const settingPreferenceValue = form.watch("setting_preference");
+  const discomfortAppetiteValue = form.watch("discomfort_appetite");
+  const foodPersonalityValue = form.watch("food_personality");
+  const socialVibeValue = form.watch("social_vibe");
+  const budgetMindsetValue = form.watch("budget_mindset");
+  const pastTripLovedValue = form.watch("past_trip_loved");
   const currencyValue = form.watch("currency");
   const budgetAmountValue = form.watch("budget_amount");
   const companionsValue = form.watch("companions");
+  const includesFlightsValue = form.watch("includes_flights");
+  const maxFlightHoursValue = form.watch("max_flight_hours");
+  const numberOfPeopleValue = form.watch("number_of_people");
   const manualTripType = form.watch("trip_type");
   const minEndDate = startDateValue
     ? new Date(new Date(startDateValue).getTime() + 24 * 60 * 60 * 1000)
@@ -687,9 +769,19 @@ export default function Home() {
     setSelectedDestination("");
   }, [
     tripGoalValue,
-    themesValue,
-    foodValue,
-    weatherValue,
+    emotionalGoalsValue,
+    dailyPaceValue,
+    excitementFocusValue,
+    settingPreferenceValue,
+    discomfortAppetiteValue,
+    foodPersonalityValue,
+    socialVibeValue,
+    budgetMindsetValue,
+    pastTripLovedValue,
+    companionsValue,
+    numberOfPeopleValue,
+    includesFlightsValue,
+    maxFlightHoursValue,
     currencyValue,
     budgetAmountValue,
     startDateValue,
@@ -709,6 +801,24 @@ export default function Home() {
         ? "domestic"
         : "international"
       : (manualTripType as TripType);
+
+  const toggleLimitedChoice = (
+    field: "emotional_goals" | "excitement_focus" | "setting_preference",
+    option: string,
+    maxSelections: number,
+  ) => {
+    const current = form.getValues(field) || [];
+    if (current.includes(option)) {
+      form.setValue(
+        field,
+        current.filter((item) => item !== option),
+        { shouldValidate: true },
+      );
+      return;
+    }
+    if (current.length >= maxSelections) return;
+    form.setValue(field, [...current, option], { shouldValidate: true });
+  };
 
   return (
     <Layout>
@@ -737,7 +847,7 @@ export default function Home() {
           </div>
         </div>
 
-        <form onSubmit={form.handleSubmit(onSubmit)}>
+        <form onSubmit={form.handleSubmit(onSubmit)} autoComplete="off">
           <AnimatePresence mode="wait">
             {currentStep === 0 && (
               <WizardStep key="step1" title={STEPS[0].title} description={STEPS[0].desc}>
@@ -930,16 +1040,135 @@ export default function Home() {
                     </div>
                   )}
 
+                  <div className="space-y-2">
+                    <Label>Travel Dates</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">From</Label>
+                        <Input
+                          id="startDate"
+                          type="date"
+                          className="h-12"
+                          required
+                          min={todayDateString}
+                          {...form.register("startDate")}
+                          onChange={(e) => {
+                            const selectedStart = e.target.value;
+                            form.setValue("startDate", selectedStart, { shouldValidate: true });
+                            if (!selectedStart) return;
+                            const minAllowedEnd = new Date(new Date(selectedStart).getTime() + 24 * 60 * 60 * 1000)
+                              .toISOString()
+                              .split("T")[0];
+                            const currentEnd = form.getValues("endDate");
+                            if (!currentEnd || new Date(currentEnd) <= new Date(selectedStart)) {
+                              form.setValue("endDate", minAllowedEnd, { shouldValidate: true });
+                              form.setValue("days", 1);
+                              return;
+                            }
+                            const start = new Date(e.target.value);
+                            const end = new Date(form.getValues("endDate"));
+                            if (end > start) {
+                              const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                              form.setValue("days", diff);
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">To</Label>
+                        <Input
+                          id="endDate"
+                          type="date"
+                          className="h-12"
+                          required
+                          min={minEndDate}
+                          {...form.register("endDate")}
+                          onChange={(e) => {
+                            form.setValue("endDate", e.target.value, { shouldValidate: true });
+                            const end = new Date(e.target.value);
+                            const start = new Date(form.getValues("startDate"));
+                            if (end > start) {
+                              const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                              form.setValue("days", diff);
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                    {(form.formState.errors.startDate || form.formState.errors.endDate) && (
+                      <p className="text-sm text-destructive">
+                        {form.formState.errors.startDate?.message || form.formState.errors.endDate?.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </WizardStep>
+            )}
+
+            {currentStep === 1 && (
+              <WizardStep key="step2" title={STEPS[1].title} description={STEPS[1].desc}>
+                <div className="grid gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label>Travel Setup</Label>
+                      <Select
+                        onValueChange={(val) =>
+                          form.setValue("companions", val, { shouldValidate: true })
+                        }
+                        defaultValue={form.getValues("companions")}
+                      >
+                        <SelectTrigger id="companions" className="h-12">
+                          <SelectValue placeholder="How are you traveling?" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {COMPANIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {form.formState.errors.companions && (
+                        <p className="text-sm text-destructive">{form.formState.errors.companions.message}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="number_of_people">Number of People</Label>
+                      <Input
+                        id="number_of_people"
+                        type="number"
+                        autoComplete="off"
+                        min={1}
+                        max={companionsValue === "Solo" ? 1 : companionsValue === "Couple" ? 2 : undefined}
+                        disabled={companionsValue === "Solo" || companionsValue === "Couple"}
+                        className="h-12"
+                        required
+                        {...form.register("number_of_people", { valueAsNumber: true })}
+                      />
+                      {(companionsValue === "Solo" || companionsValue === "Couple") && (
+                        <p className="text-xs text-muted-foreground">
+                          {companionsValue === "Solo"
+                            ? "Solo travel is fixed to 1 person."
+                            : "Couple travel is fixed to 2 people."}
+                        </p>
+                      )}
+                      {form.formState.errors.number_of_people && (
+                        <p className="text-sm text-destructive">{form.formState.errors.number_of_people.message}</p>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <Label htmlFor="currency">Currency</Label>
-                      <Select 
+                      <Select
                         onValueChange={(val) =>
                           form.setValue("currency", val, { shouldValidate: true })
                         }
                         defaultValue={form.getValues("currency")}
                       >
-                        <SelectTrigger className="h-12">
+                        <SelectTrigger id="currency" className="h-12">
                           <SelectValue placeholder="Select Currency" />
                         </SelectTrigger>
                         <SelectContent>
@@ -952,14 +1181,13 @@ export default function Home() {
                         <p className="text-sm text-destructive">{form.formState.errors.currency.message}</p>
                       )}
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <Label htmlFor="budget_amount">Total Trip Budget</Label>
-                      <Input 
-                        id="budget_amount" 
-                        type="number" 
+                      <Input
+                        id="budget_amount"
+                        type="number"
+                        autoComplete="off"
                         className="h-12"
                         required
                         min={1}
@@ -999,6 +1227,7 @@ export default function Home() {
                         <Input
                           id="max_flight_hours"
                           type="number"
+                          autoComplete="off"
                           min={1}
                           max={24}
                           required
@@ -1010,116 +1239,6 @@ export default function Home() {
                         )}
                       </div>
                     )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Travel Dates</Label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">From</Label>
-                        <Input
-                          type="date"
-                          className="h-12"
-                          required
-                          min={todayDateString}
-                          {...form.register("startDate")}
-                          onChange={(e) => {
-                            const selectedStart = e.target.value;
-                            form.setValue("startDate", selectedStart, { shouldValidate: true });
-                            if (!selectedStart) return;
-                            const minAllowedEnd = new Date(new Date(selectedStart).getTime() + 24 * 60 * 60 * 1000)
-                              .toISOString()
-                              .split("T")[0];
-                            const currentEnd = form.getValues("endDate");
-                            if (!currentEnd || new Date(currentEnd) <= new Date(selectedStart)) {
-                              form.setValue("endDate", minAllowedEnd, { shouldValidate: true });
-                              form.setValue("days", 1);
-                              return;
-                            }
-                            const start = new Date(e.target.value);
-                            const end = new Date(form.getValues("endDate"));
-                            if (end > start) {
-                              const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                              form.setValue("days", diff);
-                            }
-                          }}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">To</Label>
-                        <Input
-                          type="date"
-                          className="h-12"
-                          required
-                          min={minEndDate}
-                          {...form.register("endDate")}
-                          onChange={(e) => {
-                            form.setValue("endDate", e.target.value, { shouldValidate: true });
-                            const end = new Date(e.target.value);
-                            const start = new Date(form.getValues("startDate"));
-                            if (end > start) {
-                              const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                              form.setValue("days", diff);
-                            }
-                          }}
-                        />
-                      </div>
-                    </div>
-                    {(form.formState.errors.startDate || form.formState.errors.endDate) && (
-                      <p className="text-sm text-destructive">
-                        {form.formState.errors.startDate?.message || form.formState.errors.endDate?.message}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label>Travel Setup</Label>
-                      <Select
-                        onValueChange={(val) =>
-                          form.setValue("companions", val, { shouldValidate: true })
-                        }
-                        defaultValue={form.getValues("companions")}
-                      >
-                        <SelectTrigger className="h-12">
-                          <SelectValue placeholder="How are you traveling?" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {COMPANIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {form.formState.errors.companions && (
-                        <p className="text-sm text-destructive">{form.formState.errors.companions.message}</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="number_of_people">Number of People</Label>
-                      <Input
-                        id="number_of_people"
-                        type="number"
-                        min={1}
-                        max={companionsValue === "Solo" ? 1 : companionsValue === "Couple" ? 2 : undefined}
-                        disabled={companionsValue === "Solo" || companionsValue === "Couple"}
-                        className="h-12"
-                        required
-                        {...form.register("number_of_people", { valueAsNumber: true })}
-                      />
-                      {(companionsValue === "Solo" || companionsValue === "Couple") && (
-                        <p className="text-xs text-muted-foreground">
-                          {companionsValue === "Solo"
-                            ? "Solo travel is fixed to 1 person."
-                            : "Couple travel is fixed to 2 people."}
-                        </p>
-                      )}
-                      {form.formState.errors.number_of_people && (
-                        <p className="text-sm text-destructive">{form.formState.errors.number_of_people.message}</p>
-                      )}
-                    </div>
                   </div>
 
                   {budgetFeedback && (
@@ -1142,97 +1261,202 @@ export default function Home() {
                       </AlertDescription>
                     </Alert>
                   )}
-
-                  <div className="space-y-2">
-                    <Label htmlFor="must_avoid">Must Avoid (Optional)</Label>
-                    <Textarea
-                      id="must_avoid"
-                      placeholder="e.g. avoid nightlife, avoid heavy walking, avoid humid weather, no long flights"
-                      className="min-h-[92px]"
-                      {...form.register("must_avoid")}
-                    />
-                  </div>
                 </div>
               </WizardStep>
             )}
 
-            {currentStep === 1 && (
-              <WizardStep key="step2" title={STEPS[1].title} description={STEPS[1].desc}>
+            {currentStep === 2 && (
+              <WizardStep key="step3" title={STEPS[2].title} description={STEPS[2].desc}>
                 <div className="space-y-8">
                   <div className="space-y-4">
-                    <Label className="text-base">What interests you? (Select at least 1)</Label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {THEMES.map((theme) => (
-                        <div key={theme} className="flex items-center space-x-2">
-                          <Checkbox 
-                            id={theme} 
-                            checked={form.watch("themes")?.includes(theme)}
-                            onCheckedChange={(checked) => {
-                              const current = form.getValues("themes") || [];
-                              if (checked) {
-                                form.setValue("themes", [...current, theme]);
-                              } else {
-                                form.setValue("themes", current.filter(t => t !== theme));
-                              }
-                            }}
+                    <Label className="text-base">1. What do you want to feel on this trip? (Select up to 2)</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {EMOTIONAL_GOALS.map((goal, index) => (
+                        <div key={goal} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`emotion-${index}`}
+                            checked={form.watch("emotional_goals")?.includes(goal)}
+                            onCheckedChange={() => toggleLimitedChoice("emotional_goals", goal, 2)}
                           />
-                          <Label htmlFor={theme} className="cursor-pointer font-normal">{theme}</Label>
+                          <Label htmlFor={`emotion-${index}`} className="cursor-pointer font-normal">{goal}</Label>
                         </div>
                       ))}
                     </div>
-                    {form.formState.errors.themes && (
-                      <p className="text-sm text-destructive">Please select at least one theme</p>
+                    {form.formState.errors.emotional_goals && (
+                      <p className="text-sm text-destructive">{form.formState.errors.emotional_goals.message}</p>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="food">Dietary Preferences</Label>
-                      <Select 
-                        onValueChange={(val) => form.setValue("food", val)} 
-                        defaultValue={form.getValues("food")}
-                      >
-                        <SelectTrigger className="h-12">
-                          <SelectValue placeholder="Select dietary preference" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {["Vegetarian", "Vegan", "Sea Food", "Halal", "Gluten-Free", "No Restrictions"].map(d => (
-                            <SelectItem key={d} value={d}>{d}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="weather">Preferred Weather</Label>
-                      <Input id="weather" {...form.register("weather")} placeholder="e.g. Cool & breezy" className="h-12" />
-                    </div>
+                  <div className="space-y-2">
+                    <Label>2. What's your ideal daily pace?</Label>
+                    <Select
+                      onValueChange={(val) =>
+                        form.setValue("daily_pace", val as TripRequest["daily_pace"], { shouldValidate: true })
+                      }
+                      defaultValue={form.getValues("daily_pace")}
+                    >
+                      <SelectTrigger id="daily_pace" className="h-12">
+                        <SelectValue placeholder="Select daily pace" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="slow_spontaneous">Slow & spontaneous</SelectItem>
+                        <SelectItem value="balanced">Balanced</SelectItem>
+                        <SelectItem value="packed_high_energy">Packed & high-energy</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {form.formState.errors.daily_pace && (
+                      <p className="text-sm text-destructive">{form.formState.errors.daily_pace.message}</p>
+                    )}
                   </div>
 
-                  <div className="space-y-6">
-                    <Label className="text-lg font-semibold">Personality Evaluation</Label>
-                    <PreferenceSlider 
-                      label="Spontaneity" 
-                      leftLabel="Planned" 
-                      rightLabel="Spontaneous"
-                      value={form.watch("personality.spontaneity")}
-                      onChange={(val) => form.setValue("personality.spontaneity", val[0])}
-                      icon={<Sparkles className="w-5 h-5 text-primary" />}
-                    />
-                    <PreferenceSlider 
-                      label="Organization" 
-                      leftLabel="Go with the flow" 
-                      rightLabel="Highly Organized"
-                      value={form.watch("personality.organization")}
-                      onChange={(val) => form.setValue("personality.organization", val[0])}
-                      icon={<Compass className="w-5 h-5 text-primary" />}
-                    />
-                    <PreferenceSlider 
-                      label="Curiosity" 
-                      leftLabel="Familiar" 
-                      rightLabel="Adventurous"
-                      value={form.watch("personality.curiosity")}
-                      onChange={(val) => form.setValue("personality.curiosity", val[0])}
-                      icon={<Plane className="w-5 h-5 text-primary" />}
+                  <div className="space-y-4">
+                    <Label className="text-base">3. What excites you most? (Choose up to 3)</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {EXCITEMENT_FOCUS.map((focus, index) => (
+                        <div key={focus} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`focus-${index}`}
+                            checked={form.watch("excitement_focus")?.includes(focus)}
+                            onCheckedChange={() => toggleLimitedChoice("excitement_focus", focus, 3)}
+                          />
+                          <Label htmlFor={`focus-${index}`} className="cursor-pointer font-normal">{focus}</Label>
+                        </div>
+                      ))}
+                    </div>
+                    {form.formState.errors.excitement_focus && (
+                      <p className="text-sm text-destructive">{form.formState.errors.excitement_focus.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-4">
+                    <Label className="text-base">4. Which setting pulls you most? (Choose up to 2)</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {[
+                        { value: "beaches", label: "Beaches" },
+                        { value: "mountains", label: "Mountains" },
+                        { value: "big_city", label: "Big city" },
+                        { value: "small_charming_town", label: "Small charming town" },
+                        { value: "countryside", label: "Countryside" },
+                        { value: "desert", label: "Desert" },
+                        { value: "snowy_landscape", label: "Snowy landscape" },
+                      ].map((setting, index) => (
+                        <div key={setting.value} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`setting-${index}`}
+                            checked={form.watch("setting_preference")?.includes(setting.value)}
+                            onCheckedChange={() => toggleLimitedChoice("setting_preference", setting.value, 2)}
+                          />
+                          <Label htmlFor={`setting-${index}`} className="cursor-pointer font-normal">
+                            {setting.label}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                    {form.formState.errors.setting_preference && (
+                      <p className="text-sm text-destructive">{form.formState.errors.setting_preference.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>5. How adventurous are you with discomfort?</Label>
+                    <Select
+                      onValueChange={(val) =>
+                        form.setValue("discomfort_appetite", val as TripRequest["discomfort_appetite"], { shouldValidate: true })
+                      }
+                      defaultValue={form.getValues("discomfort_appetite")}
+                    >
+                      <SelectTrigger id="discomfort_appetite" className="h-12">
+                        <SelectValue placeholder="Select comfort with novelty" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="comfort_predictability">I need comfort & predictability</SelectItem>
+                        <SelectItem value="some_novelty">Some novelty is fine</SelectItem>
+                        <SelectItem value="wild_adventure">Throw me somewhere wild</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {form.formState.errors.discomfort_appetite && (
+                      <p className="text-sm text-destructive">{form.formState.errors.discomfort_appetite.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>6. Food personality?</Label>
+                    <Select
+                      onValueChange={(val) =>
+                        form.setValue("food_personality", val as TripRequest["food_personality"], { shouldValidate: true })
+                      }
+                      defaultValue={form.getValues("food_personality")}
+                    >
+                      <SelectTrigger id="food_personality" className="h-12">
+                        <SelectValue placeholder="Select food personality" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fine_dining">Fine dining</SelectItem>
+                        <SelectItem value="local_street_food">Local street food</SelectItem>
+                        <SelectItem value="dietary_restrictions">Dietary restrictions - Vegetarian/Vegan/Jain</SelectItem>
+                        <SelectItem value="no_food_planning">I don't plan around food</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {form.formState.errors.food_personality && (
+                      <p className="text-sm text-destructive">{form.formState.errors.food_personality.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>7. Social vibe?</Label>
+                    <Select
+                      onValueChange={(val) =>
+                        form.setValue("social_vibe", val as TripRequest["social_vibe"], { shouldValidate: true })
+                      }
+                      defaultValue={form.getValues("social_vibe")}
+                    >
+                      <SelectTrigger id="social_vibe" className="h-12">
+                        <SelectValue placeholder="Select social vibe" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="solo_reflective">Solo reflective</SelectItem>
+                        <SelectItem value="romantic_couple">Romantic couple</SelectItem>
+                        <SelectItem value="friends_fun">Friends fun</SelectItem>
+                        <SelectItem value="meet_new_people">Meet new people</SelectItem>
+                        <SelectItem value="family_focused">Family-focused</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {form.formState.errors.social_vibe && (
+                      <p className="text-sm text-destructive">{form.formState.errors.social_vibe.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>8. Budget mindset?</Label>
+                    <Select
+                      onValueChange={(val) =>
+                        form.setValue("budget_mindset", val as TripRequest["budget_mindset"], { shouldValidate: true })
+                      }
+                      defaultValue={form.getValues("budget_mindset")}
+                    >
+                      <SelectTrigger id="budget_mindset" className="h-12">
+                        <SelectValue placeholder="Select budget mindset" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="max_value">Max value</SelectItem>
+                        <SelectItem value="balanced">Balanced</SelectItem>
+                        <SelectItem value="premium_comfort">Premium comfort</SelectItem>
+                        <SelectItem value="once_in_lifetime_splurge">Once-in-a-lifetime splurge</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {form.formState.errors.budget_mindset && (
+                      <p className="text-sm text-destructive">{form.formState.errors.budget_mindset.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="past_trip_loved">9. Which past trip did you love most? (Optional)</Label>
+                    <Input
+                      id="past_trip_loved"
+                      autoComplete="off"
+                      className="h-12"
+                      placeholder="e.g. Bali beaches, Kyoto culture, Swiss Alps trek"
+                      {...form.register("past_trip_loved")}
                     />
                   </div>
                 </div>
@@ -1240,7 +1464,7 @@ export default function Home() {
             )}
           </AnimatePresence>
 
-          {currentStep === 1 && tripGoalValue === "need_recommendation" && destinationOptions.length > 0 && (
+          {currentStep === 2 && tripGoalValue === "need_recommendation" && destinationOptions.length > 0 && (
             <div className="mt-8 space-y-4">
               <Label className="text-lg font-semibold">Top Destination Options</Label>
               <div className="grid gap-4">
@@ -1328,9 +1552,9 @@ export default function Home() {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Planning...
                   </>
-                ) : currentStep === 1 && tripGoalValue === "need_recommendation" && destinationOptions.length === 0 ? (
+                ) : currentStep === 2 && tripGoalValue === "need_recommendation" && destinationOptions.length === 0 ? (
                   "Find Destinations"
-                ) : currentStep === 1 && tripGoalValue === "need_recommendation" ? (
+                ) : currentStep === 2 && tripGoalValue === "need_recommendation" ? (
                   "Generate Itinerary"
                 ) : (
                   "Generate Trip"
@@ -1341,42 +1565,5 @@ export default function Home() {
         </form>
       </div>
     </Layout>
-  );
-}
-
-function PreferenceSlider({ 
-  label, 
-  leftLabel, 
-  rightLabel, 
-  value, 
-  onChange,
-  icon
-}: { 
-  label: string; 
-  leftLabel: string; 
-  rightLabel: string; 
-  value: number; 
-  onChange: (val: number[]) => void;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        {icon}
-        <Label className="text-base font-semibold text-foreground/80">{label}</Label>
-      </div>
-      <Slider 
-        min={1} 
-        max={5} 
-        step={1} 
-        value={[value]} 
-        onValueChange={onChange}
-        className="py-2"
-      />
-      <div className="flex justify-between text-xs font-medium text-muted-foreground uppercase tracking-wide">
-        <span>{leftLabel}</span>
-        <span>{rightLabel}</span>
-      </div>
-    </div>
   );
 }

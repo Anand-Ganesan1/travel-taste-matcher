@@ -14,30 +14,38 @@ export const tripRequestSchema = z.object({
   trip_type: z.enum(["domestic", "international"], {
     required_error: "Please select domestic or international travel",
   }),
-  energy: z.number().min(1).max(5),
   number_of_people: z.number().int().min(1, "Number of people is required"),
   includes_flights: z.boolean(),
   max_flight_hours: z.number().min(1, "Max flight duration is required").max(24).optional(),
   budget_amount: z.number().positive("Budget amount is required"),
   currency: z.string().min(1, "Currency is required"),
-  activity: z.number().min(1).max(5),
-  social: z.number().min(1).max(5),
-  aesthetic: z.number().min(1).max(5),
-  themes: z.array(z.string()).min(1),
-  food: z.string(),
-  weather: z.string(),
+  emotional_goals: z.array(z.string()).min(1, "Select at least 1 emotional goal").max(2, "Select up to 2 emotional goals"),
+  daily_pace: z.enum(["slow_spontaneous", "balanced", "packed_high_energy"], {
+    required_error: "Please select your ideal daily pace",
+  }),
+  excitement_focus: z.array(z.string()).min(1, "Select at least 1 excitement focus").max(3, "Select up to 3 excitement focuses"),
+  setting_preference: z.array(
+    z.enum(["beaches", "mountains", "big_city", "small_charming_town", "countryside", "desert", "snowy_landscape"]),
+  ).min(1, "Select at least 1 preferred setting").max(2, "Select up to 2 preferred settings"),
+  discomfort_appetite: z.enum(["comfort_predictability", "some_novelty", "wild_adventure"], {
+    required_error: "Please select your comfort with discomfort",
+  }),
+  food_personality: z.enum(["fine_dining", "local_street_food", "dietary_restrictions", "no_food_planning"], {
+    required_error: "Please select your food personality",
+  }),
+  social_vibe: z.enum(["solo_reflective", "romantic_couple", "friends_fun", "meet_new_people", "family_focused"], {
+    required_error: "Please select your social vibe",
+  }),
+  budget_mindset: z.enum(["max_value", "balanced", "premium_comfort", "once_in_lifetime_splurge"], {
+    required_error: "Please select your budget mindset",
+  }),
+  past_trip_loved: z.string().trim().optional(),
   days: z.coerce.number().min(1),
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().min(1, "End date is required"),
   location: z.string().trim().min(1, "Starting location is required"),
   destination_location: z.string().trim().optional(),
-  must_avoid: z.string().trim().optional(),
   companions: z.string().min(1, "Travel setup is required"),
-  personality: z.object({
-    spontaneity: z.number().min(1).max(5),
-    organization: z.number().min(1).max(5),
-    curiosity: z.number().min(1).max(5),
-  }),
 }).superRefine((data, ctx) => {
   const { startDate, endDate } = data;
   const start = new Date(startDate);
