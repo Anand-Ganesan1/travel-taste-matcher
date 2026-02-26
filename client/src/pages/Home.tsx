@@ -16,14 +16,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Plane, Compass, Sparkles, Coffee, X } from "lucide-react";
+import { Loader2, Plane, Compass, Sparkles, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Helper for multi-step form
 const STEPS = [
   { id: 'basics', title: 'The Basics', desc: 'Set your trip essentials so we can personalize recommendations.' },
-  { id: 'vibe', title: 'Your Travel Vibe', desc: 'Tell us how you like to travel.' },
-  { id: 'details', title: 'Finishing Touches', desc: 'Specific interests and constraints.' },
+  { id: 'details', title: 'Finishing Touches', desc: 'Share your interests and personality so we can refine your trip.' },
 ] as const;
 
 function toLocalDateString(date: Date): string {
@@ -414,8 +413,6 @@ export default function Home() {
         fieldsToValidate.push("max_flight_hours");
       }
     }
-    if (currentStep === 1) fieldsToValidate = ['energy', 'activity', 'social', 'aesthetic'];
-    
     const isValid = await form.trigger(fieldsToValidate);
     if (!isValid) return;
 
@@ -1162,39 +1159,6 @@ export default function Home() {
             {currentStep === 1 && (
               <WizardStep key="step2" title={STEPS[1].title} description={STEPS[1].desc}>
                 <div className="space-y-8">
-                  <PreferenceSlider 
-                    label="Pace & Energy" 
-                    leftLabel="Relaxed" 
-                    rightLabel="Action Packed"
-                    value={form.watch("energy")}
-                    onChange={(val) => form.setValue("energy", val[0])}
-                    icon={<Coffee className="w-5 h-5 text-primary" />}
-                  />
-                  
-                  <PreferenceSlider 
-                    label="Activity Level" 
-                    leftLabel="Leisurely" 
-                    rightLabel="Intense"
-                    value={form.watch("activity")}
-                    onChange={(val) => form.setValue("activity", val[0])}
-                    icon={<Compass className="w-5 h-5 text-primary" />}
-                  />
-
-                  <PreferenceSlider 
-                    label="Social Vibe" 
-                    leftLabel="Secluded" 
-                    rightLabel="Party/Social"
-                    value={form.watch("social")}
-                    onChange={(val) => form.setValue("social", val[0])}
-                    icon={<Plane className="w-5 h-5 text-primary" />}
-                  />
-                </div>
-              </WizardStep>
-            )}
-
-            {currentStep === 2 && (
-              <WizardStep key="step3" title={STEPS[2].title} description={STEPS[2].desc}>
-                <div className="space-y-8">
                   <div className="space-y-4">
                     <Label className="text-base">What interests you? (Select at least 1)</Label>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1276,7 +1240,7 @@ export default function Home() {
             )}
           </AnimatePresence>
 
-          {currentStep === 2 && tripGoalValue === "need_recommendation" && destinationOptions.length > 0 && (
+          {currentStep === 1 && tripGoalValue === "need_recommendation" && destinationOptions.length > 0 && (
             <div className="mt-8 space-y-4">
               <Label className="text-lg font-semibold">Top Destination Options</Label>
               <div className="grid gap-4">
@@ -1364,9 +1328,9 @@ export default function Home() {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Planning...
                   </>
-                ) : currentStep === 2 && tripGoalValue === "need_recommendation" && destinationOptions.length === 0 ? (
+                ) : currentStep === 1 && tripGoalValue === "need_recommendation" && destinationOptions.length === 0 ? (
                   "Find Destinations"
-                ) : currentStep === 2 && tripGoalValue === "need_recommendation" ? (
+                ) : currentStep === 1 && tripGoalValue === "need_recommendation" ? (
                   "Generate Itinerary"
                 ) : (
                   "Generate Trip"
