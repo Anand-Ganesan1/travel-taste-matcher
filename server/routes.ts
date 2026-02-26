@@ -72,7 +72,7 @@ function normalizeRecommendationPayload(
 ): { options: Array<Record<string, unknown>> } {
   const data = payload as { options?: Array<Record<string, unknown>> };
   const options = (data.options || [])
-    .slice(0, 3)
+    .slice(0, 6)
     .map((option) => {
       const metrics = (option.metrics || {}) as Record<string, unknown>;
       const estimatedBudget = (option.estimated_budget || {}) as Record<string, unknown>;
@@ -116,6 +116,51 @@ function normalizeRecommendationPayload(
     });
 
   return { options };
+}
+
+function normalizeText(value?: string): string {
+  return (value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+const PAST_TRIP_TO_COUNTRY: Record<string, string> = {
+  bali: "indonesia",
+  phuket: "thailand",
+  krabi: "thailand",
+  kyoto: "japan",
+  osaka: "japan",
+  paris: "france",
+  dubai: "united arab emirates",
+};
+
+function isPastTripMatch(
+  pastTripLoved: string | undefined,
+  option: { destination?: unknown; country?: unknown },
+): boolean {
+  const past = normalizeText(pastTripLoved);
+  if (!past) return false;
+  const destination = normalizeText(String(option.destination || ""));
+  const country = normalizeText(String(option.country || ""));
+  if (!destination && !country) return false;
+  if (past === destination || past === country) return true;
+  const mappedCountry = PAST_TRIP_TO_COUNTRY[past];
+  if (mappedCountry && country === mappedCountry) return true;
+  return (
+    destination.includes(past) ||
+    country.includes(past) ||
+    past.includes(destination) ||
+    past.includes(country)
+  );
+}
+
+function diversifyRecommendations(
+  normalized: { options: Array<Record<string, unknown>> },
+  pastTripLoved?: string,
+): { options: Array<Record<string, unknown>> } {
+  const nonMatching = normalized.options.filter(
+    (option) => !isPastTripMatch(pastTripLoved, option),
+  );
+  const diversified = nonMatching.slice(0, 3);
+  return { options: diversified };
 }
 
 export async function registerRoutes(
@@ -251,19 +296,21 @@ Destination recommendation mode:
 You are a travel planner AI that designs trips based on personality and vibe.
 
 User preferences:
-Energy level: ${input.energy}
 Comfort level: ${input.comfort_level}
 Number of people: ${input.number_of_people}
 Budget amount: ${input.budget_amount} ${input.currency}
 Includes flights in budget: ${input.includes_flights ? "yes" : "no"}
 Max flight duration: ${input.max_flight_hours ?? "Not specified"} hours
 Budget currency strength: ${currencyStrength}
-Activity intensity: ${input.activity}
-Social media importance: ${input.social}
-Aesthetic preference: ${input.aesthetic}
-Themes: ${input.themes.join(", ")}
-Food preference: ${input.food}
-Weather preference: ${input.weather}
+Emotion goals (max 2): ${input.emotional_goals.join(", ")}
+Ideal daily pace: ${input.daily_pace}
+Excitement focus (max 3): ${input.excitement_focus.join(", ")}
+Setting preference: ${input.setting_preference.join(", ")}
+Discomfort appetite: ${input.discomfort_appetite}
+Food personality: ${input.food_personality}
+Social vibe: ${input.social_vibe}
+Budget mindset: ${input.budget_mindset}
+Past trip loved: ${input.past_trip_loved || "Not provided"}
 Travel dates: ${input.startDate} to ${input.endDate} (${input.days} days)
 Starting location: ${input.location}
 Trip planning mode: ${input.trip_goal}
@@ -272,17 +319,15 @@ Trip type selected: ${inferredTripType}
 Assume the traveler is a citizen of the country in the starting location.
 Detected origin country: ${originCountry || "Unknown"}
 Detected destination country: ${destinationCountry || "Unknown"}
-Must avoid: ${input.must_avoid || "None specified"}
 Nearby value destinations from this origin: ${nearbyValueOptionsText}
 Traveling with: ${input.companions}
-Personality traits (1-5): Spontaneity: ${input.personality.spontaneity}, Organization: ${input.personality.organization}, Curiosity: ${input.personality.curiosity}
 
 Generate a personalized travel plan.
 
 Requirements:
-${hasExplicitDestination ? "Use the provided destination and keep itinerary realistic for that destination." : "Pick ONE destination that fits the weather preference for the given dates and budget."}
+${hasExplicitDestination ? "Use the provided destination and keep itinerary realistic for that destination." : "Pick ONE destination that best fits the given inputs and budget."}
 Create a trip theme name.
-Match daily energy levels.
+Match daily pace and comfort preferences.
 Include a realistic packing list.
 Add general document reminders (passport, ID, visas if international).
 Each itinerary item MUST include a specific time (e.g., "09:00 AM", "02:30 PM").
@@ -291,8 +336,17 @@ If budget currency is weak, bias toward better-value destinations and cost-effic
 If budget currency is strong, wider destination options are acceptable but still stay realistic.
 Respect whether flights are included in budget.
 Respect max flight duration when selecting/confirming destination and daily plan feasibility.
-Respect must-avoid constraints.
 Do not assume proximity to any specific country solely from the chosen currency; use starting location geography and trip type first.
+Use this V3 scoring model while planning and prioritizing itinerary choices:
+- Emotion Index (20%)
+- Pace Index (15%)
+- Interest Vector (20%)
+- Comfort/Risk Index (10%)
+- Geography Bias (10%)
+- Food Index (10%)
+- Social Index (5%)
+- Budget Tier (5%)
+- Historical Behavior Fit (5%)
 ${seniorCitizenGuidance}
 ${tripTypeGuidance}
 ${destinationPlanningGuidance}
@@ -432,7 +486,7 @@ Do NOT include explanations or markdown.
 
       const prompt = `
 You are a travel recommendation engine.
-Return exactly 3 ranked destination options for this traveler.
+Return 5 ranked destination options for this traveler.
 
 User inputs:
 - Trip planning mode: ${input.trip_goal}
@@ -444,23 +498,37 @@ User inputs:
 - Max flight duration: ${input.max_flight_hours ?? "Not specified"} hours
 - Comfort level: ${input.comfort_level}
 - Companions: ${input.companions}
-- Must avoid: ${input.must_avoid || "None specified"}
 - Dates: ${input.startDate} to ${input.endDate} (${input.days} days)
-- Vibe factors (1-5): energy=${input.energy}, activity=${input.activity}, social=${input.social}, aesthetic=${input.aesthetic}
-- Themes: ${input.themes.join(", ")}
-- Food: ${input.food}
-- Weather: ${input.weather}
-- Personality: spontaneity=${input.personality.spontaneity}, organization=${input.personality.organization}, curiosity=${input.personality.curiosity}
+- Emotion goals: ${input.emotional_goals.join(", ")}
+- Daily pace: ${input.daily_pace}
+- Excitement focus: ${input.excitement_focus.join(", ")}
+- Setting preference: ${input.setting_preference.join(", ")}
+- Discomfort appetite: ${input.discomfort_appetite}
+- Food personality: ${input.food_personality}
+- Social vibe: ${input.social_vibe}
+- Budget mindset: ${input.budget_mindset}
+- Past trip loved: ${input.past_trip_loved || "Not provided"}
 
 Rules:
-- Output exactly 3 options sorted by total_score descending.
+- Output 5 options sorted by total_score descending.
 - Each metric including total_score must be on a 1 to 10 scale.
 - total_score must be a normalized composite score (not a sum beyond 10).
+- Use this weighted scoring model to compute fit and explain rankings:
+  - Emotion Index (20%)
+  - Pace Index (15%)
+  - Interest Vector (20%)
+  - Comfort/Risk Index (10%)
+  - Geography Bias (10%)
+  - Food Index (10%)
+  - Social Index (5%)
+  - Budget Tier (5%)
+  - Historical Behavior Fit (5%)
 - For international trips, return country-level recommendations in "country" and keep "destination" as a representative city/region within that country.
 - For domestic trips, keep "destination" as city/region and "country" as the same origin country.
 - If trip planning mode is know_destination and destination is given (${input.destination_location || "none"}), option 1 MUST be that destination.
+- If past trip loved is provided (${input.past_trip_loved || "none"}), use its vibe/archetype but DO NOT suggest the same destination/country as an option.
 - Enforce trip type domestic/international from starting location country.
-- Respect must-avoid and max flight duration.
+- Respect max flight duration.
 - Be budget realistic (include budget ranges).
 
 Return only JSON with this exact schema:
@@ -495,7 +563,8 @@ Return only JSON with this exact schema:
       }
 
       const normalized = normalizeRecommendationPayload(JSON.parse(content), input.currency);
-      const parsed = destinationRecommendationResponseSchema.parse(normalized);
+      const diversified = diversifyRecommendations(normalized, input.past_trip_loved);
+      const parsed = destinationRecommendationResponseSchema.parse(diversified);
       return res.json(parsed);
     } catch (err) {
       console.error("Error recommending destinations:", err);
